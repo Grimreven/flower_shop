@@ -171,6 +171,58 @@ app.post("/logout", authenticateToken, async (req, res) => {
   res.json({ message: "Выход выполнен успешно" });
 });
 
+// 🔹 Получить все товары
+app.get("/products", async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT p.*, c.name AS category_name
+      FROM products p
+      LEFT JOIN categories c ON c.id = p.category_id
+      ORDER BY p.id DESC;
+    `);
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Ошибка GET /products:", err);
+    res.status(500).json({ message: "Ошибка сервера" });
+  }
+});
+
+// 🔹 Получить популярные товары
+app.get("/products/popular", async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT p.*, c.name AS category_name
+      FROM products p
+      LEFT JOIN categories c ON c.id = p.category_id
+      ORDER BY p.rating DESC NULLS LAST, p.id DESC
+      LIMIT 6;
+    `);
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Ошибка GET /products/popular:", err);
+    res.status(500).json({ message: "Ошибка сервера" });
+  }
+});
+
+app.get("/products/:id/reviews", async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT r.*, c.name AS user_name
+      FROM reviews r
+      LEFT JOIN customers c ON c.id = r.user_id
+      WHERE r.product_id = $1
+      ORDER BY r.created_at DESC
+    `, [req.params.id]);
+
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Ошибка GET /products/:id/reviews:", err);
+    res.status(500).json({ message: "Ошибка сервера" });
+  }
+});
+
+
+
 // ------------------- Запуск сервера -------------------
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`🚀 Сервер запущен на http://localhost:${PORT}`));

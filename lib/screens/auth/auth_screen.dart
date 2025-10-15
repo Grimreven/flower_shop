@@ -108,9 +108,23 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.pinkAccent),
+          onPressed: () {
+            // Переход на главный экран без очистки токена
+            Navigator.of(context).pushReplacement(
+              MaterialPageRoute(builder: (_) => const MainScreen()),
+            );
+          },
+        ),
+      ),
+      extendBodyBehindAppBar: true,
       body: Stack(
         children: [
-          // Background gradient and decorative shapes
+          // Background gradient
           Container(
             decoration: const BoxDecoration(
               gradient: LinearGradient(

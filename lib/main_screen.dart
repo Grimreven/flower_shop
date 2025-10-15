@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flower_shop/screens/profile/profile_screen.dart';
-import 'package:flower_shop/screens/auth/login_screen.dart';
-import 'package:flower_shop/screens/auth/register_screen.dart';
 import 'package:flower_shop/screens/home/home_screen.dart';
 import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flower_shop/screens/auth/auth_screen.dart';
+import 'screens/search/search_screen.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({Key? key}) : super(key: key);
@@ -18,13 +17,8 @@ class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
   bool _isLoggedIn = false;
 
-  final List<Widget> _pages = [
-    const HomeScreen(),
-    const Center(child: Text('Поиск', style: TextStyle(fontSize: 24))),
-    const Center(child: Text('Корзина', style: TextStyle(fontSize: 24))),
-    const Center(child: Text('Заказы', style: TextStyle(fontSize: 24))),
-    const ProfileScreen(),
-  ];
+  // Список категорий (можно подгружать из API)
+  final List<String> categories = ['Орхидеи', 'Розы', 'Лилии', 'Тюльпаны'];
 
   @override
   void initState() {
@@ -38,6 +32,18 @@ class _MainScreenState extends State<MainScreen> {
     setState(() {
       _isLoggedIn = token != null && token.isNotEmpty;
     });
+  }
+
+  void _handleSearch(String query) {
+    // Логика поиска по товарам
+    print('Поиск: $query');
+  }
+
+  void _handleFilter(SearchFilters filters) {
+    // Логика фильтров
+    print('Фильтры: ${filters.categories}, '
+        '${filters.priceRange.start}-${filters.priceRange.end}, '
+        'В наличии: ${filters.inStockOnly}');
   }
 
   Future<void> _onTabTapped(int index) async {
@@ -82,8 +88,18 @@ class _MainScreenState extends State<MainScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final List<Widget> pages = [
+      const HomeScreen(),
+      SearchScreen(
+        categories: categories,
+      ),
+      const Center(child: Text('Корзина', style: TextStyle(fontSize: 24))),
+      const Center(child: Text('Заказы', style: TextStyle(fontSize: 24))),
+      const ProfileScreen(),
+    ];
+
     return Scaffold(
-      body: _pages[_currentIndex],
+      body: pages[_currentIndex],
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
         type: BottomNavigationBarType.fixed,
@@ -93,7 +109,8 @@ class _MainScreenState extends State<MainScreen> {
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Главная'),
           BottomNavigationBarItem(icon: Icon(Icons.search), label: 'Поиск'),
-          BottomNavigationBarItem(icon: Icon(Icons.shopping_cart), label: 'Корзина'),
+          BottomNavigationBarItem(
+              icon: Icon(Icons.shopping_cart), label: 'Корзина'),
           BottomNavigationBarItem(icon: Icon(Icons.list_alt), label: 'Заказы'),
           BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Профиль'),
         ],

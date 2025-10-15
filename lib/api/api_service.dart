@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user.dart';
+import 'package:flower_shop/models/product.dart';
 
 class ApiService {
   static const String baseUrl = "http://10.0.2.2:3000";
@@ -15,6 +16,12 @@ class ApiService {
   static Future<void> saveToken(String token) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString("token", token);
+  }
+
+  // ✅ Новый метод
+  static Future<bool> isLoggedIn() async {
+    final token = await getToken();
+    return token != null && token.isNotEmpty;
   }
 
   static Future<Map<String, dynamic>?> register(String name, String email, String password) async {
@@ -117,5 +124,29 @@ class ApiService {
     }
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove("token");
+  }
+
+  // Получение всех товаров
+  static Future<List<Product>> fetchAllProducts() async {
+    final response = await http.get(Uri.parse('$baseUrl/products'));
+    print("Ответ от сервера /products: ${response.body}");
+
+    if (response.statusCode == 200) {
+      final List data = jsonDecode(response.body);
+      return data.map((e) => Product.fromJson(e)).toList();
+    } else {
+      throw Exception('Ошибка загрузки товаров');
+    }
+  }
+
+  // Получение популярных товаров
+  static Future<List<Product>> fetchPopularProducts() async {
+    final response = await http.get(Uri.parse('$baseUrl/products/popular'));
+    if (response.statusCode == 200) {
+      final List data = jsonDecode(response.body);
+      return data.map((e) => Product.fromJson(e)).toList();
+    } else {
+      throw Exception('Ошибка загрузки популярных товаров');
+    }
   }
 }
