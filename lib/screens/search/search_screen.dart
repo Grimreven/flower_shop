@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
 import '../../models/product.dart';
 import '../../widgets/product_card.dart';
 import '../../widgets/product_detail.dart';
 import '../../utils/app_colors.dart';
 import '../../api/api_service.dart';
 import '../auth/auth_screen.dart';
+import '../../controllers/cart_controller.dart';
 
 class SearchFilters {
   List<String> categories;
@@ -39,6 +41,8 @@ class _SearchScreenState extends State<SearchScreen> {
   List<Product> allProducts = [];
   List<Product> filteredProducts = [];
   bool isLoading = true;
+
+  final CartController cartController = Get.find<CartController>();
 
   @override
   void initState() {
@@ -79,7 +83,6 @@ class _SearchScreenState extends State<SearchScreen> {
   void _applySearchAndFilters() {
     List<Product> temp = allProducts;
 
-    // Поиск по имени или описанию
     if (searchQuery.isNotEmpty) {
       temp = temp
           .where((p) =>
@@ -88,17 +91,14 @@ class _SearchScreenState extends State<SearchScreen> {
           .toList();
     }
 
-    // Фильтры по категории
     if (filters.categories.isNotEmpty) {
       temp = temp.where((p) => filters.categories.contains(p.categoryName)).toList();
     }
 
-    // Фильтр по цене
     temp = temp
         .where((p) => p.price >= filters.priceRange.start && p.price <= filters.priceRange.end)
         .toList();
 
-    // В наличии
     if (filters.inStockOnly) {
       temp = temp.where((p) => p.inStock).toList();
     }
@@ -215,35 +215,23 @@ class _SearchScreenState extends State<SearchScreen> {
                 final product = filteredProducts[index];
                 return ProductCard(
                   product: product,
-                  onAddToCart: () async {
-                    if (await _checkAuth()) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('${product.name} добавлен в корзину')),
-                      );
-                    }
+                  onAddToCart: () {
+                    cartController.addToCart(product);
+                    Get.snackbar('Добавлено', '${product.name} в корзину',
+                        snackPosition: SnackPosition.BOTTOM);
                   },
-                  onViewDetails: () async {
+                  onViewDetails: () {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) => ProductDetail(
-                          product: product,
-                          onAddToCart: () async {
-                            if (await _checkAuth()) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                    content:
-                                    Text('${product.name} добавлен в корзину')),
-                              );
-                            }
-                          },
-                        ),
+                        builder: (_) => ProductDetail(product: product),
                       ),
                     );
                   },
                 );
               },
             ),
+
           ],
         ),
       ),

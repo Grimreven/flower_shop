@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:get/get.dart';
 import 'package:flower_shop/api/api_service.dart';
 import 'package:flower_shop/main_screen.dart';
 
@@ -114,10 +113,7 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.pinkAccent),
           onPressed: () {
-            // Переход на главный экран без очистки токена
-            Navigator.of(context).pushReplacement(
-              MaterialPageRoute(builder: (_) => const MainScreen()),
-            );
+            Navigator.pop(context);
           },
         ),
       ),

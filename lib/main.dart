@@ -1,9 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'controllers/auth_controller.dart';
+import 'controllers/cart_controller.dart';
 import 'main_screen.dart';
 import 'utils/app_colors.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // 1️⃣ Создаём и регистрируем контроллеры
+  final authController = Get.put(AuthController());
+  Get.put(CartController(authController: authController));
+
   runApp(const FlowerShopApp());
 }
 
@@ -12,7 +20,7 @@ class FlowerShopApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GetMaterialApp( // Используем GetMaterialApp вместо MaterialApp
+    return GetMaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Цветочный магазин',
       theme: ThemeData(
@@ -43,13 +51,13 @@ class _SplashScreenState extends State<SplashScreen>
 
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 3),
+      duration: const Duration(seconds: 2),
     );
 
     _animation = CurvedAnimation(parent: _controller, curve: Curves.easeInOut);
     _controller.forward();
 
-    Future.delayed(const Duration(seconds: 4), () {
+    Future.delayed(const Duration(seconds: 3), () {
       Get.off(() => const MainScreen(), transition: Transition.fadeIn);
     });
   }

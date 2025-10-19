@@ -1,24 +1,32 @@
 import 'package:flutter/material.dart';
-import '../../utils/app_colors.dart';
-import '../../widgets/product_card.dart';
+import 'package:get/get.dart';
 import '../../models/product.dart';
 import '../../api/api_service.dart';
-import '../auth/auth_screen.dart';
-import '../../widgets/product_detail.dart'; // <-- импорт экрана деталей
+import '../../controllers/cart_controller.dart';
+import '../../widgets/product_card.dart';
+import '../../widgets/product_detail.dart';
+import '../../utils/app_colors.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({Key? key}) : super(key: key);
+  const HomeScreen({super.key});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  final CartController cartController = Get.find<CartController>();
+
+  List<Product> allProducts = [];
   List<Product> popularProducts = [];
   List<Product> newProducts = [];
-  List<Product> allProducts = [];
+  List<Product> filteredProducts = [];
+
+  String searchQuery = '';
+  List<String> selectedCategories = [];
+  RangeValues priceRange = const RangeValues(0, 10000);
+  bool inStockOnly = false;
   bool isLoading = true;
-  bool isError = false;
 
   @override
   void initState() {
@@ -27,169 +35,251 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _loadProducts() async {
+    setState(() => isLoading = true);
     try {
-      final fetchedAll = await ApiService.fetchAllProducts();
-      final fetchedPopular = await ApiService.fetchPopularProducts();
-      final fetchedNew = fetchedAll.length >= 4
-          ? fetchedAll.sublist(fetchedAll.length - 4).reversed.toList()
-          : fetchedAll.reversed.toList();
+      final all = await ApiService.fetchAllProducts();
+      final popular = await ApiService.fetchPopularProducts();
+      final newItems = all.length >= 4
+          ? all.sublist(all.length - 4).reversed.toList()
+          : all.reversed.toList();
 
-      if (!mounted) return;
       setState(() {
-        allProducts = fetchedAll;
-        popularProducts = fetchedPopular;
-        newProducts = fetchedNew;
+        allProducts = all;
+        popularProducts = popular;
+        newProducts = newItems;
+        filteredProducts = all;
         isLoading = false;
-        isError = false;
       });
     } catch (e) {
-      print("Ошибка загрузки товаров: $e");
-      setState(() {
-        isLoading = false;
-        isError = true;
-      });
+      print('Ошибка загрузки товаров: $e');
+      setState(() => isLoading = false);
     }
   }
 
-  void _handleAddToCart(Product product) async {
-    final loggedIn = await ApiService.isLoggedIn();
-    if (!loggedIn) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Пожалуйста, войдите или зарегистрируйтесь, чтобы добавить товар в корзину'),
-        ),
-      );
-      Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => const AuthScreen()),
-      );
-      return;
+  void _applyFilters() {
+    List<Product> temp = allProducts;
+
+    // Поиск
+    if (searchQuery.isNotEmpty) {
+      temp = temp
+          .where((p) =>
+      p.name.toLowerCase().contains(searchQuery.toLowerCase()) ||
+          (p.description != null &&
+              p.description!
+                  .toLowerCase()
+                  .contains(searchQuery.toLowerCase())))
+          .toList();
     }
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('${product.name} добавлен в корзину')),
+    // Категории
+    if (selectedCategories.isNotEmpty) {
+      temp = temp
+          .where((p) => selectedCategories.contains(p.categoryName))
+          .toList();
+    }
+
+    // Цена
+    temp = temp
+        .where((p) => p.price >= priceRange.start && p.price <= priceRange.end)
+        .toList();
+
+    // Только в наличии
+    if (inStockOnly) {
+      temp = temp.where((p) => p.inStock).toList();
+    }
+
+    setState(() {
+      filteredProducts = temp;
+    });
+  }
+
+  void _toggleCategory(String category) {
+    setState(() {
+      if (selectedCategories.contains(category)) {
+        selectedCategories.remove(category);
+      } else {
+        selectedCategories.add(category);
+      }
+    });
+    _applyFilters();
+  }
+
+  void _clearFilters() {
+    setState(() {
+      selectedCategories.clear();
+      priceRange = const RangeValues(0, 10000);
+      inStockOnly = false;
+    });
+    _applyFilters();
+  }
+
+  void _openProductDetail(Product product) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => ProductDetail(product: product)),
     );
   }
 
-  Widget _buildProductList(List<Product> products) {
-    return SizedBox(
-      height: 260,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        itemCount: products.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 16),
-        itemBuilder: (context, index) {
-          final product = products[index];
-          return SizedBox(
-            width: 180,
-            child: ProductCard(
-              product: product,
-              onAddToCart: () => _handleAddToCart(product),
-              onViewDetails: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => ProductDetail(
-                      product: product,
-                      onAddToCart: () => _handleAddToCart(product),
-                    ),
-                  ),
-                );
+  Widget _buildFilters() {
+    final categories = allProducts.map((p) => p.categoryName).toSet().toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            ...categories.map(
+                  (c) => FilterChip(
+                label: Text(c),
+                selected: selectedCategories.contains(c),
+                onSelected: (_) => _toggleCategory(c),
+              ),
+            ),
+            FilterChip(
+              label: const Text('В наличии'),
+              selected: inStockOnly,
+              onSelected: (_) {
+                setState(() {
+                  inStockOnly = !inStockOnly;
+                  _applyFilters();
+                });
               },
             ),
-          );
-        },
-      ),
+            TextButton(
+              onPressed: _clearFilters,
+              child: const Text('Очистить фильтры'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            const Text('Цена:'),
+            Expanded(
+              child: RangeSlider(
+                min: 0,
+                max: 10000,
+                divisions: 100,
+                labels: RangeLabels(
+                  priceRange.start.toStringAsFixed(0),
+                  priceRange.end.toStringAsFixed(0),
+                ),
+                values: priceRange,
+                onChanged: (range) {
+                  setState(() => priceRange = range);
+                  _applyFilters();
+                },
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSection(String title, List<Product> products) {
+    final displayProducts = filteredProducts.isEmpty && searchQuery.isNotEmpty
+        ? []
+        : products.where((p) => filteredProducts.contains(p)).toList();
+
+    if (displayProducts.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding:
+          const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12),
+          child: Text(
+            title,
+            style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+          ),
+        ),
+        GridView.builder(
+          physics: const NeverScrollableScrollPhysics(),
+          shrinkWrap: true,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            childAspectRatio: 0.68,
+            crossAxisSpacing: 12,
+            mainAxisSpacing: 12,
+          ),
+          itemCount: displayProducts.length,
+          itemBuilder: (context, index) {
+            final product = displayProducts[index];
+            return ProductCard(
+              product: product,
+              onViewDetails: () => _openProductDetail(product),
+              onAddToCart: () {
+                cartController.addToCart(product);
+                Get.snackbar(
+                  'Добавлено',
+                  '${product.name} в корзину',
+                  snackPosition: SnackPosition.BOTTOM,
+                );
+              },
+            );
+          },
+        ),
+      ],
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    if (isLoading) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator(color: AppColors.primary)),
-      );
-    }
-
-    if (isError) {
-      return Scaffold(
-        body: Center(
-          child: Text(
-            'Ошибка загрузки товаров',
-            style: TextStyle(color: Colors.red.shade700, fontSize: 18),
-          ),
-        ),
-      );
-    }
-
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        title: Row(
-          children: [
-            Image.asset('assets/flowerLogo2.png', width: 36),
-            const SizedBox(width: 8),
-            const Text(
-              'Цветочный магазин',
-              style: TextStyle(
-                color: AppColors.primary,
-                fontWeight: FontWeight.bold,
-              ),
+        title: TextField(
+          onChanged: (value) {
+            setState(() => searchQuery = value);
+            _applyFilters();
+          },
+          decoration: InputDecoration(
+            hintText: 'Поиск цветов...',
+            prefixIcon: const Icon(Icons.search),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide.none,
             ),
-          ],
-        ),
-      ),
-      body: RefreshIndicator(
-        onRefresh: _loadProducts,
-        child: SingleChildScrollView(
-          physics: const BouncingScrollPhysics(),
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('Популярное', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 12),
-              _buildProductList(popularProducts),
-              const SizedBox(height: 32),
-              const Text('Новинки', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 12),
-              _buildProductList(newProducts),
-              const SizedBox(height: 32),
-              const Text('Все товары', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 12),
-              GridView.builder(
-                physics: const NeverScrollableScrollPhysics(),
-                shrinkWrap: true,
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 2,
-                  mainAxisSpacing: 16,
-                  crossAxisSpacing: 16,
-                  childAspectRatio: 0.72,
-                ),
-                itemCount: allProducts.length,
-                itemBuilder: (context, index) {
-                  final product = allProducts[index];
-                  return ProductCard(
-                    product: product,
-                    onAddToCart: () => _handleAddToCart(product),
-                    onViewDetails: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => ProductDetail(
-                            product: product,
-                            onAddToCart: () => _handleAddToCart(product),
-                          ),
-                        ),
-                      );
-                    },
-                  );
-                },
-              ),
-            ],
+            filled: true,
+            fillColor: Colors.white,
           ),
         ),
+        backgroundColor: AppColors.primary,
+        toolbarHeight: 70,
+      ),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: _buildFilters(),
+          ),
+          Expanded(
+            child: isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildSection('Популярное', popularProducts),
+                  _buildSection('Новинки', newProducts),
+                  _buildSection('Все товары', allProducts),
+                  if (filteredProducts.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.all(16.0),
+                      child: Center(
+                          child: Text('Товары не найдены')),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

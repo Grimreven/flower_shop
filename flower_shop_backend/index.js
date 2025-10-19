@@ -213,7 +213,6 @@ app.get("/products/:id/reviews", async (req, res) => {
       WHERE r.product_id = $1
       ORDER BY r.created_at DESC
     `, [req.params.id]);
-
     res.json(result.rows);
   } catch (err) {
     console.error("Ошибка GET /products/:id/reviews:", err);
@@ -221,7 +220,159 @@ app.get("/products/:id/reviews", async (req, res) => {
   }
 });
 
+// ------------------- Корзина -------------------
 
+// 🔹 Получить корзину пользователя
+app.get("/cart", authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    // Находим корзину пользователя (или создаём, если нет)
+    const cartResult = await pool.query(
+      "SELECT id FROM carts WHERE user_id = $1",
+      [userId]
+    );
+    let cartId;
+    if (cartResult.rows.length === 0) {
+      const newCart = await pool.query(
+        "INSERT INTO carts (user_id) VALUES ($1) RETURNING id",
+        [userId]
+      );
+      cartId = newCart.rows[0].id;
+    } else {
+      cartId = cartResult.rows[0].id;
+    }
+
+    // Получаем содержимое корзины
+   const items = await pool.query(
+     `SELECT ci.id, ci.product_id, ci.quantity,
+             p.name, p.price, p.image_url, p.description, p.category_id,
+             c.name AS category_name, p.rating, p.in_stock
+      FROM cart_items ci
+      JOIN products p ON p.id = ci.product_id
+      LEFT JOIN categories c ON c.id = p.category_id
+      WHERE ci.cart_id = $1
+      ORDER BY ci.id DESC`,
+     [cartId]
+   );
+
+
+    res.json(items.rows);
+  } catch (err) {
+    console.error("Ошибка GET /cart:", err);
+    res.status(500).json({ message: "Ошибка сервера" });
+  }
+});
+
+
+// 🔹 Добавить товар в корзину
+app.post("/cart", authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { product_id, quantity } = req.body;
+
+    // Проверяем / создаём корзину
+    let cart = await pool.query("SELECT id FROM carts WHERE user_id=$1", [userId]);
+    if (cart.rows.length === 0) {
+      const newCart = await pool.query(
+        "INSERT INTO carts (user_id) VALUES ($1) RETURNING id",
+        [userId]
+      );
+      cart = newCart;
+    }
+    const cartId = cart.rows[0].id;
+
+    // Проверяем, есть ли уже этот товар
+    const existing = await pool.query(
+      "SELECT id, quantity FROM cart_items WHERE cart_id=$1 AND product_id=$2",
+      [cartId, product_id]
+    );
+
+    if (existing.rows.length > 0) {
+      // обновляем количество
+      const newQuantity = existing.rows[0].quantity + quantity;
+      await pool.query(
+        "UPDATE cart_items SET quantity=$1 WHERE id=$2",
+        [newQuantity, existing.rows[0].id]
+      );
+    } else {
+      await pool.query(
+        "INSERT INTO cart_items (cart_id, product_id, quantity) VALUES ($1, $2, $3)",
+        [cartId, product_id, quantity]
+      );
+    }
+
+    res.json({ message: "Товар добавлен в корзину" });
+  } catch (err) {
+    console.error("Ошибка POST /cart:", err);
+    res.status(500).json({ message: "Ошибка сервера" });
+  }
+});
+
+
+// 🔹 Изменить количество товара
+app.put("/cart/:product_id", authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { quantity } = req.body;
+    const { product_id } = req.params;
+
+    const cart = await pool.query("SELECT id FROM carts WHERE user_id=$1", [userId]);
+    if (cart.rows.length === 0) return res.status(404).json({ message: "Корзина не найдена" });
+
+    const cartId = cart.rows[0].id;
+
+    await pool.query(
+      "UPDATE cart_items SET quantity=$1 WHERE cart_id=$2 AND product_id=$3",
+      [quantity, cartId, product_id]
+    );
+
+    res.json({ message: "Количество обновлено" });
+  } catch (err) {
+    console.error("Ошибка PUT /cart:", err);
+    res.status(500).json({ message: "Ошибка сервера" });
+  }
+});
+
+
+// 🔹 Удалить товар из корзины
+app.delete("/cart/:product_id", authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { product_id } = req.params;
+
+    const cart = await pool.query("SELECT id FROM carts WHERE user_id=$1", [userId]);
+    if (cart.rows.length === 0) return res.status(404).json({ message: "Корзина не найдена" });
+
+    const cartId = cart.rows[0].id;
+
+    await pool.query("DELETE FROM cart_items WHERE cart_id=$1 AND product_id=$2", [cartId, product_id]);
+
+    res.json({ message: "Товар удалён из корзины" });
+  } catch (err) {
+    console.error("Ошибка DELETE /cart:", err);
+    res.status(500).json({ message: "Ошибка сервера" });
+  }
+});
+
+
+// 🔹 Очистить корзину
+app.delete("/cart", authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    const cart = await pool.query("SELECT id FROM carts WHERE user_id=$1", [userId]);
+    if (cart.rows.length === 0) return res.status(404).json({ message: "Корзина не найдена" });
+
+    const cartId = cart.rows[0].id;
+
+    await pool.query("DELETE FROM cart_items WHERE cart_id=$1", [cartId]);
+    res.json({ message: "Корзина очищена" });
+  } catch (err) {
+    console.error("Ошибка очистки корзины:", err);
+    res.status(500).json({ message: "Ошибка сервера" });
+  }
+});
 
 // ------------------- Запуск сервера -------------------
 const PORT = process.env.PORT || 3000;

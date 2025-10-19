@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:flower_shop/screens/profile/profile_screen.dart';
+import 'package:flower_shop/api/api_service.dart';
 import 'package:flower_shop/screens/home/home_screen.dart';
-import 'package:get/get.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flower_shop/screens/cart/cart_screen.dart';
+import 'package:flower_shop/screens/orders/orders_screen.dart';
+import 'package:flower_shop/screens/profile/profile_screen.dart';
 import 'package:flower_shop/screens/auth/auth_screen.dart';
-import 'screens/search/search_screen.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({Key? key}) : super(key: key);
@@ -14,105 +14,64 @@ class MainScreen extends StatefulWidget {
 }
 
 class _MainScreenState extends State<MainScreen> {
-  int _currentIndex = 0;
-  bool _isLoggedIn = false;
+  int _selectedIndex = 0;
+  final List<Widget> _screens = [
+    const HomeScreen(),
+    const CartScreen(),
+    OrdersScreen(),
+    const ProfileScreen(),
+  ];
 
-  // Список категорий (можно подгружать из API)
-  final List<String> categories = ['Орхидеи', 'Розы', 'Лилии', 'Тюльпаны'];
+  Future<void> _onItemTapped(int index) async {
+    bool isLoggedIn = await ApiService.isLoggedIn();
 
-  @override
-  void initState() {
-    super.initState();
-    _checkAuthStatus();
-  }
-
-  Future<void> _checkAuthStatus() async {
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('token');
-    setState(() {
-      _isLoggedIn = token != null && token.isNotEmpty;
-    });
-  }
-
-  void _handleSearch(String query) {
-    // Логика поиска по товарам
-    print('Поиск: $query');
-  }
-
-  void _handleFilter(SearchFilters filters) {
-    // Логика фильтров
-    print('Фильтры: ${filters.categories}, '
-        '${filters.priceRange.start}-${filters.priceRange.end}, '
-        'В наличии: ${filters.inStockOnly}');
-  }
-
-  Future<void> _onTabTapped(int index) async {
-    // Проверяем авторизацию для ограниченных вкладок
-    if ((index == 2 || index == 3 || index == 4) && !_isLoggedIn) {
-      _showAuthDialog();
+    // Проверяем, если выбрана корзина, заказы или профиль — и не авторизован
+    if ((index == 1 || index == 2 || index == 3) && !isLoggedIn) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Пожалуйста, войдите или зарегистрируйтесь'),
+          backgroundColor: Colors.pinkAccent,
+        ),
+      );
+      // Переход на экран авторизации
+      Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const AuthScreen()),
+      );
       return;
     }
 
-    setState(() => _currentIndex = index);
-  }
-
-  void _showAuthDialog() {
-    Get.defaultDialog(
-      title: 'Требуется авторизация',
-      titleStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-      middleText:
-      'Чтобы использовать корзину, заказы и профиль, пожалуйста, войдите или зарегистрируйтесь.',
-      middleTextStyle: const TextStyle(fontSize: 15),
-      barrierDismissible: true,
-      radius: 15,
-      confirm: ElevatedButton.icon(
-        onPressed: () {
-          Get.back();
-          Get.to(() => const AuthScreen(initialTab: AuthTab.login));
-        },
-        icon: const Icon(Icons.login),
-        label: const Text('Войти'),
-        style: ElevatedButton.styleFrom(backgroundColor: Colors.pinkAccent),
-      ),
-      cancel: OutlinedButton.icon(
-        onPressed: () {
-          Get.back();
-          Get.to(() => const AuthScreen(initialTab: AuthTab.register));
-        },
-        icon: const Icon(Icons.person_add),
-        label: const Text('Регистрация'),
-        style: OutlinedButton.styleFrom(foregroundColor: Colors.pinkAccent),
-      ),
-    );
+    setState(() {
+      _selectedIndex = index;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    final List<Widget> pages = [
-      const HomeScreen(),
-      SearchScreen(
-        categories: categories,
-      ),
-      const Center(child: Text('Корзина', style: TextStyle(fontSize: 24))),
-      const Center(child: Text('Заказы', style: TextStyle(fontSize: 24))),
-      const ProfileScreen(),
-    ];
-
     return Scaffold(
-      body: pages[_currentIndex],
+      body: _screens[_selectedIndex],
       bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
         type: BottomNavigationBarType.fixed,
+        currentIndex: _selectedIndex,
         selectedItemColor: Colors.pinkAccent,
         unselectedItemColor: Colors.grey,
-        onTap: _onTabTapped,
+        onTap: _onItemTapped,
         items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Главная'),
-          BottomNavigationBarItem(icon: Icon(Icons.search), label: 'Поиск'),
           BottomNavigationBarItem(
-              icon: Icon(Icons.shopping_cart), label: 'Корзина'),
-          BottomNavigationBarItem(icon: Icon(Icons.list_alt), label: 'Заказы'),
-          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Профиль'),
+            icon: Icon(Icons.home_outlined),
+            label: 'Главная',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.shopping_cart_outlined),
+            label: 'Корзина',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.receipt_long_outlined),
+            label: 'Заказы',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.person_outline),
+            label: 'Профиль',
+          ),
         ],
       ),
     );

@@ -1,121 +1,105 @@
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
 import '../models/product.dart';
+import '../controllers/cart_controller.dart';
 import '../utils/app_colors.dart';
 
+/// Универсальная карточка товара.
+/// onViewDetails и onAddToCart — опциональные. Если не переданы,
+/// используются действия CartController / навигация по умолчанию.
 class ProductCard extends StatelessWidget {
   final Product product;
-  final VoidCallback onAddToCart;
-  final VoidCallback? onToggleWishlist;
   final VoidCallback? onViewDetails;
+  final VoidCallback? onAddToCart;
 
   const ProductCard({
-    Key? key,
+    super.key,
     required this.product,
-    required this.onAddToCart,
-    this.onToggleWishlist,
     this.onViewDetails,
-  }) : super(key: key);
+    this.onAddToCart,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 180,
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 6,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
+    final cartController = Get.find<CartController>();
+
+    return Card(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      clipBehavior: Clip.antiAlias,
+      elevation: 3,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // ---------- Изображение ----------
-          GestureDetector(
-            onTap: onViewDetails,
-            child: ClipRRect(
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+          // Изображение
+          Expanded(
+            child: InkWell(
+              onTap: onViewDetails,
               child: Image.network(
                 product.imageUrl,
-                width: double.infinity,
-                height: 120,
                 fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => Container(
-                  height: 120,
-                  color: Colors.grey[200],
-                  child: const Icon(Icons.image_not_supported, size: 40),
-                ),
+                errorBuilder: (_, __, ___) =>
+                    Container(color: Colors.grey[200], child: const Icon(Icons.image_not_supported, size: 48)),
               ),
             ),
           ),
 
-          // ---------- Контент ----------
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.all(10),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    product.name,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 14,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '${product.price.toStringAsFixed(0)} ₽',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                      color: AppColors.primary,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      // Wishlist button
-                      if (onToggleWishlist != null)
-                        InkWell(
-                          onTap: onToggleWishlist,
-                          child: Icon(
-                            Icons.favorite_border,
-                            size: 20,
-                            color: Colors.redAccent,
-                          ),
+          // Контент
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Column(
+              children: [
+                Text(
+                  product.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 4),
+                Text('${product.price.toStringAsFixed(0)} ₽',
+                    style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.w600)),
+                const SizedBox(height: 8),
+
+                // Кнопка или контрол количества
+                Obx(() {
+                  final inCart = cartController.isInCart(product);
+                  final qty = cartController.getQuantity(product);
+
+                  if (!inCart) {
+                    return SizedBox(
+                      width: double.infinity,
+                      height: 36,
+                      child: ElevatedButton(
+                        onPressed: onAddToCart ??
+                                () {
+                              cartController.addToCart(product);
+                              Get.snackbar('Добавлено', '${product.name} добавлен в корзину',
+                                  snackPosition: SnackPosition.BOTTOM);
+                            },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                         ),
-                      // Add to cart button
-                      SizedBox(
-                        height: 32,
-                        width: 32,
-                        child: ElevatedButton(
-                          onPressed: onAddToCart,
-                          style: ElevatedButton.styleFrom(
-                            padding: EdgeInsets.zero,
-                            backgroundColor: AppColors.primary,
-                            shape: const CircleBorder(),
-                            elevation: 0,
-                          ),
-                          child: const Icon(
-                            Icons.shopping_cart_outlined,
-                            size: 16,
-                            color: Colors.white,
-                          ),
-                        ),
+                        child: const Text('В корзину'),
                       ),
-                    ],
-                  ),
-                ],
-              ),
+                    );
+                  } else {
+                    return Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.remove_circle_outline),
+                          onPressed: () => cartController.decrement(product),
+                        ),
+                        Text(qty.toString(), style: const TextStyle(fontWeight: FontWeight.bold)),
+                        IconButton(
+                          icon: const Icon(Icons.add_circle_outline),
+                          onPressed: () => cartController.increment(product),
+                        ),
+                      ],
+                    );
+                  }
+                }),
+              ],
             ),
           ),
         ],

@@ -8,7 +8,7 @@ class Product {
   final String categoryName;
   final bool inStock;
   final double rating;
-  final List<String>? care; // инструкции по уходу
+  final List<String>? care;
 
   Product({
     required this.id,

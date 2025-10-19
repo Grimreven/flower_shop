@@ -102,7 +102,7 @@ class ApiService {
         body: jsonEncode(user.toJson()),
       );
 
-      if (response.headers['content-type']?.contains('application/json') ?? false && response.statusCode == 200) {
+      if (response.headers['content-type']?.contains('application/json') ?? false) {
         return User.fromJson(jsonDecode(response.body));
       } else {
         print("Ошибка обновления профиля: ${response.body}");
@@ -129,7 +129,7 @@ class ApiService {
   // Получение всех товаров
   static Future<List<Product>> fetchAllProducts() async {
     final response = await http.get(Uri.parse('$baseUrl/products'));
-    print("Ответ от сервера /products: ${response.body}");
+    // print("Ответ от сервера /products: ${response.body}");
 
     if (response.statusCode == 200) {
       final List data = jsonDecode(response.body);
