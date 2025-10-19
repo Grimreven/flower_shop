@@ -3,8 +3,8 @@ import 'package:get/get.dart';
 import '../../controllers/cart_controller.dart';
 import '../../controllers/auth_controller.dart';
 import '../../controllers/order_controller.dart';
+import '../../models/cart_item.dart' as model;
 import '../../utils/app_colors.dart';
-import 'package:flower_shop/models/cart_item.dart' as model;
 
 class OrderCheckoutScreen extends StatefulWidget {
   const OrderCheckoutScreen({super.key});
@@ -16,9 +16,7 @@ class OrderCheckoutScreen extends StatefulWidget {
 class _OrderCheckoutScreenState extends State<OrderCheckoutScreen> {
   final CartController cartController = Get.find<CartController>();
   final AuthController authController = Get.find<AuthController>();
-  final OrderController orderController = Get.put(
-    OrderController(authController: Get.find<AuthController>()),
-  );
+  late final OrderController orderController;
 
   String paymentMethod = 'Наличный расчёт';
   String address = '';
@@ -29,6 +27,7 @@ class _OrderCheckoutScreenState extends State<OrderCheckoutScreen> {
   @override
   void initState() {
     super.initState();
+    orderController = Get.put(OrderController(authController: authController));
     address = authController.user.value?.address ?? '';
   }
 
@@ -51,7 +50,7 @@ class _OrderCheckoutScreenState extends State<OrderCheckoutScreen> {
             ...cartController.items.map((item) => ListTile(
               leading: Image.network(item.product.imageUrl, width: 50, height: 50, fit: BoxFit.cover),
               title: Text(item.product.name),
-              subtitle: Text('${item.product.price.toStringAsFixed(0)} ₽ × ${item.quantity.value}'),
+              subtitle: Text('${item.product.price.toStringAsFixed(0)} ₽ × ${item.quantity}'),
               trailing: Text('${(item.product.price * item.quantity.value).toStringAsFixed(0)} ₽'),
             )),
             const Divider(height: 30),
@@ -156,15 +155,13 @@ class _OrderCheckoutScreenState extends State<OrderCheckoutScreen> {
     }
 
     try {
-      // Преобразуем CartItem из контроллера в CartItem модели
-      final itemsForOrder = cartController.items.map((item) => model.CartItem(
-        product: item.product!,
-        quantity: item.quantity!.value,
-      )).toList();
+      // создаём заказ с моделями CartItem
+      final items = cartController.items
+          .map((e) => model.CartItem(product: e.product, quantity: e.quantity.value))
+          .toList();
 
-      await orderController.createOrder(itemsForOrder);
+      await orderController.createOrder(items);
 
-      // Вычитаем бонусы
       if (bonusToUse > 0) {
         authController.updateLoyaltyPoints(-bonusToUse);
       }
