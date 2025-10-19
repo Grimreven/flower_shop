@@ -3,7 +3,7 @@ import 'package:get/get.dart';
 import 'package:flower_shop/controllers/auth_controller.dart';
 import 'package:flower_shop/screens/home/home_screen.dart';
 import 'package:flower_shop/screens/cart/cart_screen.dart';
-import 'package:flower_shop/screens/orders/orders_screen.dart';
+import 'package:flower_shop/screens/order/orders_screen.dart';
 import 'package:flower_shop/screens/profile/profile_screen.dart';
 import 'package:flower_shop/screens/auth/auth_screen.dart';
 

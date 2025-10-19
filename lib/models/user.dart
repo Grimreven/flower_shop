@@ -6,7 +6,7 @@ class User {
   final String? address;
 
   // Данные лояльности
-  final int loyaltyPoints;
+  int loyaltyPoints;
   final String loyaltyLevel;
   final double totalSpent;
   final String loyaltyColor; // hex цвет карты

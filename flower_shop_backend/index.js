@@ -374,6 +374,86 @@ app.delete("/cart", authenticateToken, async (req, res) => {
   }
 });
 
+/// ------------------- Создание заказа -------------------
+ app.post('/orders', authenticateToken, async (req, res) => {
+   const userId = req.user.id;
+   const { items } = req.body;
+
+   if (!items || !Array.isArray(items) || items.length === 0) {
+     return res.status(400).json({ message: 'Нет товаров для заказа' });
+   }
+
+   try {
+     await pool.query('BEGIN');
+
+     // Вычисляем total заказа
+     let total = 0;
+     for (const item of items) {
+       const productRes = await pool.query(
+         'SELECT price FROM products WHERE id=$1',
+         [item.product_id]
+       );
+       if (productRes.rows.length === 0) throw new Error(`Продукт ${item.product_id} не найден`);
+       total += productRes.rows[0].price * item.quantity;
+     }
+
+     // Создаем заказ
+     const orderRes = await pool.query(
+       'INSERT INTO orders (user_id, total, status) VALUES ($1, $2, $3) RETURNING *',
+       [userId, total, 'Заказ собирается']
+     );
+     const orderId = orderRes.rows[0].id;
+
+     // Добавляем позиции заказа
+     for (const item of items) {
+       await pool.query(
+         'INSERT INTO order_items (order_id, product_id, quantity, price) VALUES ($1, $2, $3, (SELECT price FROM products WHERE id=$2))',
+         [orderId, item.product_id, item.quantity]
+       );
+     }
+
+     await pool.query('COMMIT');
+     res.json({ message: 'Заказ создан', orderId });
+   } catch (err) {
+     await pool.query('ROLLBACK');
+     console.error(err);
+     res.status(500).json({ message: 'Ошибка при создании заказа' });
+   }
+ });
+
+ // ------------------- Получение заказов пользователя -------------------
+ app.get('/orders', authenticateToken, async (req, res) => {
+   const userId = req.user.id;
+   try {
+     const ordersRes = await pool.query(
+       'SELECT * FROM orders WHERE user_id=$1 ORDER BY created_at DESC',
+       [userId]
+     );
+
+     const orders = [];
+     for (const order of ordersRes.rows) {
+       const itemsRes = await pool.query(
+         `SELECT oi.*, p.name, p.image_url
+          FROM order_items oi
+          JOIN products p ON p.id = oi.product_id
+          WHERE oi.order_id=$1`,
+         [order.id]
+       );
+       orders.push({
+         ...order,
+         items: itemsRes.rows
+       });
+     }
+
+     res.json(orders);
+   } catch (err) {
+     console.error(err);
+     res.status(500).json({ message: 'Ошибка при получении заказов' });
+   }
+ });
+
+
+
 // ------------------- Запуск сервера -------------------
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`🚀 Сервер запущен на http://localhost:${PORT}`));

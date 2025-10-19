@@ -75,7 +75,6 @@ class AuthController extends GetxController {
     Get.snackbar('Выход', 'Вы успешно вышли', snackPosition: SnackPosition.BOTTOM);
   }
 
-  // Профиль
   Future<User?> getProfile() async {
     if (token.isEmpty) return null;
     try {
@@ -103,6 +102,15 @@ class AuthController extends GetxController {
       Get.snackbar('Ошибка', 'Не удалось обновить профиль',
           snackPosition: SnackPosition.BOTTOM);
       return null;
+    }
+  }
+
+  // ✅ Новый метод для изменения бонусов
+  void updateLoyaltyPoints(int delta) {
+    final currentUser = user.value;
+    if (currentUser != null) {
+      currentUser.loyaltyPoints = (currentUser.loyaltyPoints + delta).clamp(0, double.infinity).toInt();
+      user.value = currentUser;
     }
   }
 }

@@ -14,7 +14,7 @@ class ProductCard extends StatelessWidget {
     super.key,
     required this.product,
     this.onViewDetails,
-    this.onAddToCart, required AuthController authController, required CartController cartController,
+    this.onAddToCart, required AuthController authController, required  cartController,
   });
 
   @override
