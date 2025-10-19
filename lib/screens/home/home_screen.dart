@@ -6,6 +6,7 @@ import '../../controllers/cart_controller.dart';
 import '../../widgets/product_card.dart';
 import '../../widgets/product_detail.dart';
 import '../../utils/app_colors.dart';
+import 'package:flower_shop/controllers/auth_controller.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -116,7 +117,13 @@ class _HomeScreenState extends State<HomeScreen> {
   void _openProductDetail(Product product) {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => ProductDetail(product: product)),
+      MaterialPageRoute(
+        builder: (_) => ProductDetail(
+          product: product,
+          cartController: cartController,
+          authController: Get.find(),
+        ),
+      ),
     );
   }
 
@@ -212,14 +219,18 @@ class _HomeScreenState extends State<HomeScreen> {
             final product = displayProducts[index];
             return ProductCard(
               product: product,
+              cartController: cartController,   // <-- добавили
+              authController: Get.find(),       // <-- получаем AuthController
               onViewDetails: () => _openProductDetail(product),
-              onAddToCart: () {
-                cartController.addToCart(product);
-                Get.snackbar(
-                  'Добавлено',
-                  '${product.name} в корзину',
-                  snackPosition: SnackPosition.BOTTOM,
-                );
+              onAddToCart: () async {
+                if (!Get.find<AuthController>().isLoggedIn) {
+                  Get.snackbar('Ошибка', 'Сначала войдите в профиль',
+                      snackPosition: SnackPosition.BOTTOM);
+                  return;
+                }
+                await cartController.addToCart(product);
+                Get.snackbar('Добавлено', '${product.name} в корзину',
+                    snackPosition: SnackPosition.BOTTOM);
               },
             );
           },

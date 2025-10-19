@@ -1,13 +1,13 @@
 import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../api/auth_service.dart';
-import 'cart_controller.dart';
-import 'package:flower_shop/api/cart_service.dart';
+import '../models/user.dart';
 
 class AuthController extends GetxController {
   final AuthService _authService = AuthService();
 
   var token = ''.obs;
+  var user = Rxn<User>();
 
   bool get isLoggedIn => token.isNotEmpty;
 
@@ -17,20 +17,11 @@ class AuthController extends GetxController {
     _loadToken();
   }
 
-  // ------------------- Загрузка токена и корзины -------------------
   Future<void> _loadToken() async {
     final prefs = await SharedPreferences.getInstance();
     token.value = prefs.getString('token') ?? '';
-
-    // Если пользователь уже авторизован, подгружаем корзину
-    if (isLoggedIn && Get.isRegistered<CartController>()) {
-      final cartController = Get.find<CartController>();
-      try {
-        await cartController.loadCartFromServer();
-      } catch (e) {
-        Get.snackbar('Ошибка', 'Не удалось загрузить корзину: $e',
-            snackPosition: SnackPosition.BOTTOM);
-      }
+    if (token.isNotEmpty) {
+      await getProfile();
     }
   }
 
@@ -40,27 +31,15 @@ class AuthController extends GetxController {
     token.value = value;
   }
 
-  // ------------------- Логин -------------------
   Future<bool> login(String email, String password) async {
     try {
       final result = await _authService.login(email, password);
-      if (result.containsKey('token')) {
+      if (result != null && result['token'] != null) {
         await _saveToken(result['token']);
-
-        // Загрузка корзины после успешного входа
-        if (Get.isRegistered<CartController>()) {
-          final cartController = Get.find<CartController>();
-          try {
-            await cartController.loadCartFromServer();
-          } catch (e) {
-            Get.snackbar('Ошибка', 'Не удалось загрузить корзину: $e',
-                snackPosition: SnackPosition.BOTTOM);
-          }
-        }
-
+        await getProfile();
         return true;
       } else {
-        Get.snackbar('Ошибка', result['message'] ?? 'Неизвестная ошибка',
+        Get.snackbar('Ошибка', result?['message'] ?? 'Неизвестная ошибка',
             snackPosition: SnackPosition.BOTTOM);
         return false;
       }
@@ -70,22 +49,15 @@ class AuthController extends GetxController {
     }
   }
 
-  // ------------------- Регистрация -------------------
   Future<bool> register(String name, String email, String password) async {
     try {
       final result = await _authService.register(name, email, password);
-      if (result.containsKey('token')) {
+      if (result != null && result['token'] != null) {
         await _saveToken(result['token']);
-
-        // Подгружаем корзину для нового пользователя (пустая)
-        if (Get.isRegistered<CartController>()) {
-          final cartController = Get.find<CartController>();
-          cartController.items.clear();
-        }
-
+        await getProfile();
         return true;
       } else {
-        Get.snackbar('Ошибка', result['message'] ?? 'Неизвестная ошибка',
+        Get.snackbar('Ошибка', result?['message'] ?? 'Неизвестная ошибка',
             snackPosition: SnackPosition.BOTTOM);
         return false;
       }
@@ -95,18 +67,42 @@ class AuthController extends GetxController {
     }
   }
 
-  // ------------------- Выход -------------------
   Future<void> logout() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('token');
     token.value = '';
-
-    // Очистка локальной корзины
-    if (Get.isRegistered<CartController>()) {
-      final cartController = Get.find<CartController>();
-      await cartController.clear();
-    }
-
+    user.value = null;
     Get.snackbar('Выход', 'Вы успешно вышли', snackPosition: SnackPosition.BOTTOM);
+  }
+
+  // Профиль
+  Future<User?> getProfile() async {
+    if (token.isEmpty) return null;
+    try {
+      final data = await _authService.getProfile(token.value);
+      if (data != null) {
+        user.value = User.fromJson(data);
+      }
+      return user.value;
+    } catch (e) {
+      Get.snackbar('Ошибка', 'Не удалось загрузить профиль',
+          snackPosition: SnackPosition.BOTTOM);
+      return null;
+    }
+  }
+
+  Future<User?> updateProfile(User updatedUser) async {
+    if (token.isEmpty) return null;
+    try {
+      final data = await _authService.updateProfile(token.value, updatedUser);
+      if (data != null) {
+        user.value = User.fromJson(data);
+      }
+      return user.value;
+    } catch (e) {
+      Get.snackbar('Ошибка', 'Не удалось обновить профиль',
+          snackPosition: SnackPosition.BOTTOM);
+      return null;
+    }
   }
 }

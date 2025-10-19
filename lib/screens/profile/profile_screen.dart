@@ -1,8 +1,9 @@
-import 'package:flower_shop/main_screen.dart';
 import 'package:flutter/material.dart';
-import 'package:flower_shop/api/api_service.dart';
+import 'package:get/get.dart';
+import '../../controllers/auth_controller.dart';
 import '../../models/user.dart';
 import 'loyalty_card.dart';
+import 'package:flower_shop/main_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -12,7 +13,8 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  User? user;
+  final AuthController authController = Get.find<AuthController>();
+
   User? editedUser;
   bool isLoading = true;
   bool isEditing = false;
@@ -31,8 +33,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _loadProfile() async {
     setState(() => isLoading = true);
-    final profile = await ApiService.getProfile();
 
+    final profile = await authController.getProfile();
     if (!mounted) return;
 
     if (profile == null) {
@@ -42,7 +44,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
 
     setState(() {
-      user = profile;
       editedUser = profile;
       nameController = TextEditingController(text: profile.name);
       emailController = TextEditingController(text: profile.email);
@@ -60,14 +61,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> handleSave() async {
     if (editedUser == null) return;
-    setState(() => isLoading = true);
 
-    final updated = await ApiService.updateProfile(editedUser!);
+    setState(() => isLoading = true);
+    final updated = await authController.updateProfile(editedUser!);
     if (!mounted) return;
 
     if (updated != null) {
       setState(() {
-        user = updated;
         editedUser = updated;
         isEditing = false;
         isLoading = false;
@@ -86,12 +86,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void handleCancel() {
     setState(() {
       isEditing = false;
-      if (user != null) {
-        editedUser = user;
-        nameController.text = user!.name;
-        emailController.text = user!.email;
-        phoneController.text = user!.phone ?? '';
-        addressController.text = user!.address ?? '';
+      if (editedUser != null) {
+        nameController.text = editedUser!.name;
+        emailController.text = editedUser!.email;
+        phoneController.text = editedUser!.phone ?? '';
+        addressController.text = editedUser!.address ?? '';
       }
     });
   }
@@ -109,9 +108,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
           ElevatedButton(
             onPressed: () => Navigator.of(context).pop(true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.pinkAccent,
-            ),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.pinkAccent),
             child: const Text('Выйти'),
           ),
         ],
@@ -119,7 +116,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
 
     if (confirmed == true) {
-      await ApiService.logout();
+      await authController.logout();
       if (!mounted) return;
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(builder: (_) => const MainScreen()),
@@ -141,7 +138,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
           children: [
             Icon(icon, color: isActive ? Colors.pink : Colors.grey, size: 20),
             const SizedBox(height: 2),
-            Text(label, style: TextStyle(fontSize: 12, color: isActive ? Colors.pink : Colors.grey)),
+            Text(label,
+                style: TextStyle(fontSize: 12, color: isActive ? Colors.pink : Colors.grey)),
           ],
         ),
       ),
@@ -171,12 +169,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
       );
     }
 
-    if (user == null) {
+    if (editedUser == null) {
       return Scaffold(
         appBar: AppBar(title: const Text("Профиль")),
         body: const Center(child: Text("Нет данных профиля")),
       );
     }
+
+    final user = editedUser!;
 
     return Scaffold(
       appBar: AppBar(
@@ -203,11 +203,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ],
                 ),
                 padding: const EdgeInsets.all(8),
-                child: const Icon(
-                  Icons.logout,
-                  color: Colors.white,
-                  size: 24,
-                ),
+                child: const Icon(Icons.logout, color: Colors.white, size: 24),
               ),
             ),
           ),
@@ -217,6 +213,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
+            // Аватар и основные данные
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(12),
@@ -225,7 +222,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     CircleAvatar(
                       radius: 32,
                       child: Text(
-                        user!.name.split(' ').map((n) => n[0]).join(),
+                        user.name.split(' ').map((n) => n[0]).join(),
                         style: const TextStyle(fontSize: 20),
                       ),
                     ),
@@ -234,16 +231,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(user!.name, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                          Text(user.name,
+                              style: const TextStyle(
+                                  fontSize: 18, fontWeight: FontWeight.bold)),
                           const SizedBox(height: 4),
-                          Text(user!.email, style: const TextStyle(color: Colors.grey)),
+                          Text(user.email, style: const TextStyle(color: Colors.grey)),
                           const SizedBox(height: 4),
                           Row(
                             children: [
-                              const Icon(Icons.card_giftcard, color: Colors.amber, size: 16),
+                              const Icon(Icons.card_giftcard,
+                                  color: Colors.amber, size: 16),
                               const SizedBox(width: 4),
-                              Text("${user!.loyaltyLevel} • ${user!.loyaltyPoints} баллов",
-                                  style: const TextStyle(color: Colors.amber, fontSize: 12, fontWeight: FontWeight.w500)),
+                              Text(
+                                  "${user.loyaltyLevel} • ${user.loyaltyPoints} баллов",
+                                  style: const TextStyle(
+                                      color: Colors.amber,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w500)),
                             ],
                           ),
                         ],
@@ -256,6 +260,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
             const SizedBox(height: 12),
 
+            // Секция переключения
             Card(
               child: Row(
                 children: [
@@ -268,7 +273,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
             const SizedBox(height: 12),
 
-
+            // --- Секции ---
             if (activeSection == 'info')
               Card(
                 child: Padding(
@@ -278,7 +283,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Text("Личные данные", style: TextStyle(fontWeight: FontWeight.bold)),
+                          const Text("Личные данные",
+                              style: TextStyle(fontWeight: FontWeight.bold)),
                           !isEditing
                               ? TextButton.icon(
                             onPressed: () => setState(() => isEditing = true),
@@ -287,34 +293,42 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           )
                               : Row(
                             children: [
-                              OutlinedButton(onPressed: handleCancel, child: const Text("Отмена")),
+                              OutlinedButton(
+                                  onPressed: handleCancel,
+                                  child: const Text("Отмена")),
                               const SizedBox(width: 8),
-                              ElevatedButton(onPressed: handleSave, child: const Text("Сохранить")),
+                              ElevatedButton(
+                                  onPressed: handleSave,
+                                  child: const Text("Сохранить")),
                             ],
                           ),
                         ],
                       ),
                       const SizedBox(height: 12),
-                      _inputField("Имя", nameController, (val) => editedUser = editedUser!.copyWith(name: val)),
-                      _inputField("Email", emailController, (val) => editedUser = editedUser!.copyWith(email: val)),
-                      _inputField("Телефон", phoneController, (val) => editedUser = editedUser!.copyWith(phone: val)),
-                      _inputField("Адрес доставки", addressController, (val) => editedUser = editedUser!.copyWith(address: val)),
+                      _inputField("Имя", nameController,
+                              (val) => editedUser = editedUser!.copyWith(name: val)),
+                      _inputField("Email", emailController,
+                              (val) => editedUser = editedUser!.copyWith(email: val)),
+                      _inputField("Телефон", phoneController,
+                              (val) => editedUser = editedUser!.copyWith(phone: val)),
+                      _inputField("Адрес доставки", addressController,
+                              (val) => editedUser = editedUser!.copyWith(address: val)),
                     ],
                   ),
                 ),
               ),
 
-            if (activeSection == 'loyalty' && user != null)
+            if (activeSection == 'loyalty')
               LoyaltyCard(
-                level: user!.loyaltyLevel,
-                points: user!.loyaltyPoints,
-                totalSpent: user!.totalSpent,
-                nextLevelPoints: user!.loyaltyLevel == 'Bronze'
+                level: user.loyaltyLevel,
+                points: user.loyaltyPoints,
+                totalSpent: user.totalSpent,
+                nextLevelPoints: user.loyaltyLevel == 'Bronze'
                     ? 1000
-                    : user!.loyaltyLevel == 'Silver'
+                    : user.loyaltyLevel == 'Silver'
                     ? 2500
                     : 5000,
-                colorHex: user!.loyaltyColor,
+                colorHex: user.loyaltyColor,
               ),
 
             if (activeSection == 'settings')
@@ -326,7 +340,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text("Уведомления", style: TextStyle(fontWeight: FontWeight.bold)),
+                          const Text("Уведомления",
+                              style: TextStyle(fontWeight: FontWeight.bold)),
                           SwitchListTile(
                             title: const Text("Push-уведомления"),
                             value: true,

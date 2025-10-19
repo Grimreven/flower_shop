@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flower_shop/api/api_service.dart';
+import 'package:get/get.dart';
+import 'package:flower_shop/controllers/auth_controller.dart';
 import 'package:flower_shop/main_screen.dart';
 
 enum AuthTab { login, register }
@@ -26,6 +27,8 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
   final _registerEmailController = TextEditingController();
   final _registerPasswordController = TextEditingController();
   bool _registerLoading = false;
+
+  final AuthController _authController = Get.find<AuthController>();
 
   @override
   void initState() {
@@ -56,21 +59,30 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
     }
 
     setState(() => _loginLoading = true);
-    final data = await ApiService.login(
-      _loginEmailController.text.trim(),
-      _loginPasswordController.text,
-    );
-    setState(() => _loginLoading = false);
 
-    if (data != null && data['token'] != null) {
-      await ApiService.saveToken(data['token']);
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const MainScreen()),
+    try {
+      final success = await _authController.login(
+        _loginEmailController.text.trim(),
+        _loginPasswordController.text,
       );
-    } else {
+
+      if (success) {
+        // Переход на главный экран
+        if (!mounted) return;
+        Get.offAll(() => const MainScreen());
+      } else {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Ошибка входа')),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(data?['message'] ?? 'Ошибка входа')),
+        SnackBar(content: Text('Ошибка: $e')),
       );
+    } finally {
+      if (mounted) setState(() => _loginLoading = false);
     }
   }
 
@@ -85,22 +97,30 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
     }
 
     setState(() => _registerLoading = true);
-    final data = await ApiService.register(
-      _registerNameController.text.trim(),
-      _registerEmailController.text.trim(),
-      _registerPasswordController.text,
-    );
-    setState(() => _registerLoading = false);
 
-    if (data != null && data['token'] != null) {
-      await ApiService.saveToken(data['token']);
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(builder: (_) => const MainScreen()),
+    try {
+      final success = await _authController.register(
+        _registerNameController.text.trim(),
+        _registerEmailController.text.trim(),
+        _registerPasswordController.text,
       );
-    } else {
+
+      if (success) {
+        if (!mounted) return;
+        Get.offAll(() => const MainScreen());
+      } else {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Ошибка регистрации')),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(data?['message'] ?? 'Ошибка регистрации')),
+        SnackBar(content: Text('Ошибка: $e')),
       );
+    } finally {
+      if (mounted) setState(() => _registerLoading = false);
     }
   }
 
@@ -112,15 +132,12 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.pinkAccent),
-          onPressed: () {
-            Navigator.pop(context);
-          },
+          onPressed: () => Navigator.pop(context),
         ),
       ),
       extendBodyBehindAppBar: true,
       body: Stack(
         children: [
-          // Background gradient
           Container(
             decoration: const BoxDecoration(
               gradient: LinearGradient(
@@ -130,7 +147,6 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
               ),
             ),
           ),
-          // Main content
           Center(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(16),
@@ -150,11 +166,7 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Image.asset(
-                      'assets/flowerLogo2.png',
-                      width: 80,
-                      height: 80,
-                    ),
+                    Image.asset('assets/flowerLogo2.png', width: 80, height: 80),
                     const SizedBox(height: 16),
                     const Text(
                       'Добро пожаловать',
@@ -179,10 +191,7 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
                         color: Colors.pinkAccent.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      tabs: const [
-                        Tab(text: 'Вход'),
-                        Tab(text: 'Регистрация'),
-                      ],
+                      tabs: const [Tab(text: 'Вход'), Tab(text: 'Регистрация')],
                     ),
                     const SizedBox(height: 16),
                     SizedBox(

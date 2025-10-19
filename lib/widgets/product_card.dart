@@ -14,7 +14,7 @@ class ProductCard extends StatelessWidget {
     super.key,
     required this.product,
     this.onViewDetails,
-    this.onAddToCart,
+    this.onAddToCart, required AuthController authController, required CartController cartController,
   });
 
   @override
@@ -44,24 +44,18 @@ class ProductCard extends StatelessWidget {
             padding: const EdgeInsets.all(8.0),
             child: Column(
               children: [
-                Text(
-                  product.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
+                Text(product.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontWeight: FontWeight.bold)),
                 const SizedBox(height: 4),
-                Text(
-                  '${product.price.toStringAsFixed(0)} ₽',
-                  style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.w600),
-                ),
+                Text('${product.price.toStringAsFixed(0)} ₽',
+                    style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.w600)),
                 const SizedBox(height: 8),
 
                 Obx(() {
-                  // Используем authController.token, чтобы Obx реагировал на изменения
-                  final loggedIn = authController.token.isNotEmpty;
-
-                  if (!loggedIn) {
+                  // Если не авторизован — показываем только кнопку "В корзину"
+                  if (!authController.isLoggedIn) {
                     return SizedBox(
                       width: double.infinity,
                       height: 36,
@@ -82,6 +76,7 @@ class ProductCard extends StatelessWidget {
                     );
                   }
 
+                  // Если авторизован — показываем количество или кнопку "Добавить"
                   final inCart = cartController.isInCart(product);
                   final qty = cartController.getQuantity(product);
 

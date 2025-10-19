@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:flower_shop/api/api_service.dart';
+import 'package:get/get.dart';
+import 'package:flower_shop/controllers/auth_controller.dart';
 import 'package:flower_shop/screens/home/home_screen.dart';
 import 'package:flower_shop/screens/cart/cart_screen.dart';
 import 'package:flower_shop/screens/orders/orders_screen.dart';
@@ -14,6 +15,7 @@ class MainScreen extends StatefulWidget {
 }
 
 class _MainScreenState extends State<MainScreen> {
+  final AuthController _authController = Get.find<AuthController>();
   int _selectedIndex = 0;
   final List<Widget> _screens = [
     const HomeScreen(),
@@ -23,17 +25,14 @@ class _MainScreenState extends State<MainScreen> {
   ];
 
   Future<void> _onItemTapped(int index) async {
-    bool isLoggedIn = await ApiService.isLoggedIn();
-
     // Проверяем, если выбрана корзина, заказы или профиль — и не авторизован
-    if ((index == 1 || index == 2 || index == 3) && !isLoggedIn) {
+    if ((index == 1 || index == 2 || index == 3) && !_authController.isLoggedIn) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Пожалуйста, войдите или зарегистрируйтесь'),
           backgroundColor: Colors.pinkAccent,
         ),
       );
-      // Переход на экран авторизации
       Navigator.of(context).push(
         MaterialPageRoute(builder: (_) => const AuthScreen()),
       );

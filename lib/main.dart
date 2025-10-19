@@ -4,16 +4,19 @@ import 'controllers/auth_controller.dart';
 import 'controllers/cart_controller.dart';
 import 'main_screen.dart';
 import 'utils/app_colors.dart';
-
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // 1️⃣ Создаём и регистрируем контроллеры
-  final authController = Get.put(AuthController());
-  Get.put(CartController(authController: authController));
+  // Сначала регистрируем AuthController — он загрузит токен
+  final authController = Get.put(AuthController(), permanent: true);
+
+  // Затем регистрируем CartController, передав authController как зависимость
+  Get.put(CartController(authController: authController), permanent: true);
 
   runApp(const FlowerShopApp());
 }
+
+
 
 class FlowerShopApp extends StatelessWidget {
   const FlowerShopApp({super.key});
