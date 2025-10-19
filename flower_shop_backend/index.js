@@ -412,12 +412,31 @@ app.delete("/cart", authenticateToken, async (req, res) => {
        );
      }
 
-     await pool.query('COMMIT');
-     res.json({ message: 'Заказ создан', orderId });
+    await pool.query('COMMIT');
+
+    const newOrder = await pool.query(
+      `SELECT o.*, (
+         SELECT json_agg(json_build_object(
+           'product_id', oi.product_id,
+           'quantity', oi.quantity,
+           'price', oi.price
+         )) FROM order_items oi WHERE oi.order_id = o.id
+       ) AS items
+       FROM orders o
+       WHERE o.id = $1`,
+      [orderId]
+    );
+
+    res.json(newOrder.rows[0]);
    } catch (err) {
      await pool.query('ROLLBACK');
-     console.error(err);
-     res.status(500).json({ message: 'Ошибка при создании заказа' });
+     console.error("❌ Ошибка при создании заказа:", err.message);
+     console.error("📜 Полная ошибка:", err.stack);
+     res.status(500).json({
+       message: 'Ошибка при создании заказа',
+       error: err.message,
+       stack: err.stack
+     });
    }
  });
 

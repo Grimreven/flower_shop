@@ -1,3 +1,4 @@
+// lib/controllers/auth_controller.dart
 import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../api/auth_service.dart';
@@ -105,12 +106,12 @@ class AuthController extends GetxController {
     }
   }
 
-  // ✅ Новый метод для изменения бонусов
+  // ✅ Новый метод для изменения бонусов — через copyWith (User.loyaltyPoints остаётся final)
   void updateLoyaltyPoints(int delta) {
     final currentUser = user.value;
     if (currentUser != null) {
-      currentUser.loyaltyPoints = (currentUser.loyaltyPoints + delta).clamp(0, double.infinity).toInt();
-      user.value = currentUser;
+      final newPoints = (currentUser.loyaltyPoints + delta).clamp(0, 1 << 30);
+      user.value = currentUser.copyWith(loyaltyPoints: newPoints.toInt());
     }
   }
 }

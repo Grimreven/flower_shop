@@ -3,20 +3,20 @@ import 'package:get/get.dart';
 import 'controllers/auth_controller.dart';
 import 'controllers/cart_controller.dart';
 import 'main_screen.dart';
+import 'screens/order/order_success_screen.dart';
+import 'screens/order/orders_screen.dart';
+import 'screens/order/order_detail_screen.dart';
 import 'utils/app_colors.dart';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Сначала регистрируем AuthController — он загрузит токен
+  // Регистрируем контроллеры
   final authController = Get.put(AuthController(), permanent: true);
-
-  // Затем регистрируем CartController, передав authController как зависимость
   Get.put(CartController(authController: authController), permanent: true);
 
   runApp(const FlowerShopApp());
 }
-
-
 
 class FlowerShopApp extends StatelessWidget {
   const FlowerShopApp({super.key});
@@ -31,7 +31,16 @@ class FlowerShopApp extends StatelessWidget {
         scaffoldBackgroundColor: AppColors.background,
         fontFamily: 'Montserrat',
       ),
-      home: const SplashScreen(),
+
+      // ✅ теперь у нас маршрутизация GetX
+      initialRoute: '/splash',
+      getPages: [
+        GetPage(name: '/splash', page: () => const SplashScreen()),
+        GetPage(name: '/main', page: () => const MainScreen()),
+        GetPage(name: '/orders', page: () => const OrdersScreen()),
+        GetPage(name: '/order_success', page: () => const OrderSuccessScreen()),
+        GetPage(name: '/order_details', page: () => const OrderDetailScreenPlaceholder()),
+      ],
     );
   }
 }
@@ -61,7 +70,7 @@ class _SplashScreenState extends State<SplashScreen>
     _controller.forward();
 
     Future.delayed(const Duration(seconds: 3), () {
-      Get.off(() => const MainScreen(), transition: Transition.fadeIn);
+      Get.offNamed('/main');
     });
   }
 
@@ -109,6 +118,17 @@ class _SplashScreenState extends State<SplashScreen>
           ),
         ),
       ),
+    );
+  }
+}
+
+// Временный заглушечный экран
+class OrderDetailScreenPlaceholder extends StatelessWidget {
+  const OrderDetailScreenPlaceholder({super.key});
+  @override
+  Widget build(BuildContext context) {
+    return const Scaffold(
+      body: Center(child: Text('Экран деталей заказа')),
     );
   }
 }
