@@ -16,11 +16,20 @@ class CartController extends GetxController {
   final AuthController authController;
   late final CartService cartService;
 
+  var items = <CartItem>[].obs;
+  var isLoaded = false.obs; // корзина загружена
+
   CartController({required this.authController}) {
     cartService = CartService(authController: authController);
   }
 
-  var items = <CartItem>[].obs;
+  @override
+  void onInit() {
+    super.onInit();
+    if (authController.isLoggedIn) {
+      loadCartFromServer();
+    }
+  }
 
   Future<void> loadCartFromServer() async {
     if (!authController.isLoggedIn) return;
@@ -32,7 +41,9 @@ class CartController extends GetxController {
         items.add(CartItem(ci.product, initial: ci.quantity));
       }
     } catch (e) {
-      Get.snackbar('Ошибка', 'Не удалось загрузить корзину');
+      Get.snackbar('Ошибка', 'Не удалось загрузить корзину: $e');
+    } finally {
+      isLoaded.value = true; // корзина загружена
     }
   }
 
@@ -70,6 +81,11 @@ class CartController extends GetxController {
   Future<void> removeByProduct(Product product) async {
     items.removeWhere((i) => i.product.id == product.id);
     await cartService.removeItem(product.id);
+  }
+
+  Future<void> clearLocalOnly() async {
+    items.clear();
+    // Не трогаем сервер
   }
 
   Future<void> clear() async {

@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../controllers/cart_controller.dart';
+import '../controllers/auth_controller.dart';
 import '../models/product.dart';
 import '../utils/app_colors.dart';
 
 class ProductDetail extends StatelessWidget {
   final Product product;
   final CartController cartController = Get.find<CartController>();
+  final AuthController authController = Get.find<AuthController>();
 
   ProductDetail({super.key, required this.product});
 
@@ -32,6 +34,7 @@ class ProductDetail extends StatelessWidget {
         centerTitle: true,
       ),
       body: Obx(() {
+        final loggedIn = authController.token.isNotEmpty;
         final inCart = cartController.isInCart(product);
         final quantity = cartController.getQuantity(product);
 
@@ -40,7 +43,7 @@ class ProductDetail extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // --- Изображение ---
+              // Изображение
               Hero(
                 tag: 'product_${product.id}',
                 child: ClipRRect(
@@ -57,42 +60,21 @@ class ProductDetail extends StatelessWidget {
               ),
               const SizedBox(height: 16),
 
-              // --- Название и цена ---
-              Text(
-                product.name,
-                style: const TextStyle(
-                  fontSize: 26,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
+              // Название и цена
+              Text(product.name, style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold)),
               const SizedBox(height: 6),
-              Text(
-                '${product.price.toStringAsFixed(2)} ₽',
-                style: const TextStyle(
-                  fontSize: 22,
-                  color: Colors.pinkAccent,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
+              Text('${product.price.toStringAsFixed(2)} ₽',
+                  style: const TextStyle(fontSize: 22, color: Colors.pinkAccent, fontWeight: FontWeight.w600)),
               const SizedBox(height: 20),
 
-              // --- Описание ---
-              const Text(
-                'Описание',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-              ),
+              // Описание
+              const Text('Описание', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
-              Text(
-                product.description ?? 'Описание недоступно.',
-                style: const TextStyle(fontSize: 16, height: 1.5),
-              ),
+              Text(product.description ?? 'Описание недоступно.', style: const TextStyle(fontSize: 16, height: 1.5)),
               const SizedBox(height: 24),
 
-              // --- Особенности ---
-              const Text(
-                'Особенности',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-              ),
+              // Особенности
+              const Text('Особенности', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
               const SizedBox(height: 12),
               SizedBox(
                 height: 120,
@@ -102,8 +84,7 @@ class ProductDetail extends StatelessWidget {
                   separatorBuilder: (_, __) => const SizedBox(width: 12),
                   itemBuilder: (context, index) {
                     return Card(
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                       elevation: 3,
                       child: Container(
                         width: 140,
@@ -111,17 +92,9 @@ class ProductDetail extends StatelessWidget {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(
-                              featureIcons[index],
-                              color: AppColors.primary,
-                              size: 28,
-                            ),
+                            Icon(featureIcons[index], color: AppColors.primary, size: 28),
                             const SizedBox(height: 8),
-                            Text(
-                              features[index],
-                              textAlign: TextAlign.center,
-                              style: const TextStyle(fontSize: 14),
-                            ),
+                            Text(features[index], textAlign: TextAlign.center, style: const TextStyle(fontSize: 14)),
                           ],
                         ),
                       ),
@@ -131,64 +104,47 @@ class ProductDetail extends StatelessWidget {
               ),
               const SizedBox(height: 24),
 
-              // --- Уход за растением ---
+              // Уход за растением
               if (product.care != null && product.care!.isNotEmpty)
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Уход за растением',
-                      style:
-                      TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                    ),
+                    const Text('Уход за растением', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
                     const SizedBox(height: 8),
-                    ...product.care!.map(
-                          (instruction) => Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 6),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            CircleAvatar(
-                              radius: 12,
-                              backgroundColor:
-                              AppColors.primary.withOpacity(0.1),
-                              child: Text(
-                                '${product.care!.indexOf(instruction) + 1}',
-                                style: const TextStyle(
-                                    fontSize: 12, color: AppColors.primary),
-                              ),
+                    ...product.care!.map((instruction) => Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 6),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          CircleAvatar(
+                            radius: 12,
+                            backgroundColor: AppColors.primary.withOpacity(0.1),
+                            child: Text(
+                              '${product.care!.indexOf(instruction) + 1}',
+                              style: const TextStyle(fontSize: 12, color: AppColors.primary),
                             ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Text(
-                                instruction,
-                                style: const TextStyle(fontSize: 15, height: 1.4),
-                              ),
-                            ),
-                          ],
-                        ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(child: Text(instruction, style: const TextStyle(fontSize: 15, height: 1.4))),
+                        ],
                       ),
-                    ),
+                    )),
                     const SizedBox(height: 24),
                   ],
                 ),
 
-              // --- Добавление в корзину / управление количеством ---
+              // Управление корзиной только для авторизованных
               Center(
-                child: inCart
+                child: loggedIn
+                    ? (inCart
                     ? Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     IconButton(
-                      icon: const Icon(Icons.remove_circle_outline,
-                          size: 30),
+                      icon: const Icon(Icons.remove_circle_outline, size: 30),
                       onPressed: () => cartController.decrement(product),
                     ),
-                    Text(
-                      '$quantity',
-                      style: const TextStyle(
-                          fontSize: 20, fontWeight: FontWeight.bold),
-                    ),
+                    Text('$quantity', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
                     IconButton(
                       icon: const Icon(Icons.add_circle_outline, size: 30),
                       onPressed: () => cartController.increment(product),
@@ -199,16 +155,28 @@ class ProductDetail extends StatelessWidget {
                   onPressed: () => cartController.addToCart(product),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primary,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 36, vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    padding: const EdgeInsets.symmetric(horizontal: 36, vertical: 14),
                   ),
                   icon: const Icon(Icons.shopping_cart),
-                  label: const Text(
-                    'Добавить в корзину',
-                    style: TextStyle(fontSize: 18),
+                  label: const Text('Добавить в корзину', style: TextStyle(fontSize: 18)),
+                ))
+                    : SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: ElevatedButton(
+                    onPressed: () {
+                      Get.snackbar(
+                        'Вход',
+                        'Пожалуйста, войдите, чтобы добавлять товары в корзину',
+                        snackPosition: SnackPosition.BOTTOM,
+                      );
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: const Text('В корзину', style: TextStyle(fontSize: 18)),
                   ),
                 ),
               ),

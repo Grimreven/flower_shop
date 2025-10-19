@@ -65,20 +65,34 @@ class CartItemModel {
   CartItemModel({required this.id, required this.product, required this.quantity});
 
   factory CartItemModel.fromJson(Map<String, dynamic> json) {
+    double parseDouble(dynamic value) {
+      if (value == null) return 0.0;
+      if (value is num) return value.toDouble();
+      if (value is String) return double.tryParse(value) ?? 0.0;
+      return 0.0;
+    }
+
+    int parseInt(dynamic value) {
+      if (value == null) return 0;
+      if (value is int) return value;
+      if (value is String) return int.tryParse(value) ?? 0;
+      if (value is double) return value.toInt();
+      return 0;
+    }
+
     return CartItemModel(
-      id: json['id'],
-      quantity: json['quantity'],
+      id: parseInt(json['id']),
+      quantity: parseInt(json['quantity']),
       product: Product(
-        id: json['product_id'],
-        name: json['name'],
+        id: parseInt(json['product_id']),
+        name: json['name'] ?? '',
         description: json['description'] ?? '',
-        price: (json['price'] as num).toDouble(),
+        price: parseDouble(json['price']),
         imageUrl: json['image_url'] ?? '',
-        categoryId: json['category_id'] ?? 0,
+        categoryId: parseInt(json['category_id']),
         categoryName: json['category_name'] ?? '',
         inStock: json['in_stock'] ?? true,
-        rating:
-        json['rating'] != null ? (json['rating'] as num).toDouble() : 0.0,
+        rating: parseDouble(json['rating']),
       ),
     );
   }

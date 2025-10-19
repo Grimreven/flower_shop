@@ -2,11 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import '../models/product.dart';
 import '../controllers/cart_controller.dart';
+import '../controllers/auth_controller.dart';
 import '../utils/app_colors.dart';
 
-/// Универсальная карточка товара.
-/// onViewDetails и onAddToCart — опциональные. Если не переданы,
-/// используются действия CartController / навигация по умолчанию.
 class ProductCard extends StatelessWidget {
   final Product product;
   final VoidCallback? onViewDetails;
@@ -22,6 +20,7 @@ class ProductCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cartController = Get.find<CartController>();
+    final authController = Get.find<AuthController>();
 
     return Card(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -30,7 +29,6 @@ class ProductCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Изображение
           Expanded(
             child: InkWell(
               onTap: onViewDetails,
@@ -42,8 +40,6 @@ class ProductCard extends StatelessWidget {
               ),
             ),
           ),
-
-          // Контент
           Padding(
             padding: const EdgeInsets.all(8.0),
             child: Column(
@@ -55,12 +51,37 @@ class ProductCard extends StatelessWidget {
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 4),
-                Text('${product.price.toStringAsFixed(0)} ₽',
-                    style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.w600)),
+                Text(
+                  '${product.price.toStringAsFixed(0)} ₽',
+                  style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.w600),
+                ),
                 const SizedBox(height: 8),
 
-                // Кнопка или контрол количества
                 Obx(() {
+                  // Используем authController.token, чтобы Obx реагировал на изменения
+                  final loggedIn = authController.token.isNotEmpty;
+
+                  if (!loggedIn) {
+                    return SizedBox(
+                      width: double.infinity,
+                      height: 36,
+                      child: ElevatedButton(
+                        onPressed: () {
+                          Get.snackbar(
+                            'Вход',
+                            'Пожалуйста, войдите, чтобы добавлять товары в корзину',
+                            snackPosition: SnackPosition.BOTTOM,
+                          );
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                        child: const Text('В корзину'),
+                      ),
+                    );
+                  }
+
                   final inCart = cartController.isInCart(product);
                   final qty = cartController.getQuantity(product);
 
@@ -72,8 +93,11 @@ class ProductCard extends StatelessWidget {
                         onPressed: onAddToCart ??
                                 () {
                               cartController.addToCart(product);
-                              Get.snackbar('Добавлено', '${product.name} добавлен в корзину',
-                                  snackPosition: SnackPosition.BOTTOM);
+                              Get.snackbar(
+                                'Добавлено',
+                                '${product.name} добавлен в корзину',
+                                snackPosition: SnackPosition.BOTTOM,
+                              );
                             },
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.primary,
