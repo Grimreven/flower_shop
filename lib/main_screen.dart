@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'controllers/auth_controller.dart';
 import 'screens/home/home_screen.dart';
 import 'screens/cart/cart_screen.dart';
 import 'screens/order/orders_screen.dart';
 import 'screens/profile/profile_screen.dart';
+import 'screens/auth/auth_screen.dart';
 import 'utils/app_colors.dart';
 
 class MainScreen extends StatefulWidget {
@@ -15,6 +17,7 @@ class MainScreen extends StatefulWidget {
 
 class _MainScreenState extends State<MainScreen> {
   int _currentIndex = 0;
+  final AuthController authController = Get.find<AuthController>();
 
   final List<Widget> _pages = const [
     HomeScreen(),
@@ -23,13 +26,40 @@ class _MainScreenState extends State<MainScreen> {
     ProfileScreen(),
   ];
 
-  @override
-  void initState() {
-    super.initState();
-    final args = Get.arguments;
-    if (args != null && args['tabIndex'] != null) {
-      _currentIndex = args['tabIndex'];
+  /// Проверяем авторизацию перед переходом
+  Future<void> _onTabTapped(int index) async {
+    // вкладки, где нужна авторизация
+    final restrictedTabs = [1, 2, 3]; // корзина, заказы, профиль
+
+    if (restrictedTabs.contains(index) && authController.token.isEmpty) {
+      // пользователь не авторизован
+      _showAuthDialog();
+      return;
     }
+
+    setState(() => _currentIndex = index);
+  }
+
+  void _showAuthDialog() {
+    Get.defaultDialog(
+      title: "Требуется вход",
+      titleStyle: const TextStyle(
+        fontWeight: FontWeight.bold,
+        fontSize: 20,
+        color: AppColors.primary,
+      ),
+      middleText:
+      "Чтобы просмотреть эту страницу, пожалуйста, авторизуйтесь или зарегистрируйтесь.",
+      textConfirm: "Войти",
+      textCancel: "Отмена",
+      confirmTextColor: Colors.white,
+      buttonColor: AppColors.primary,
+      cancelTextColor: AppColors.mutedForeground,
+      onConfirm: () {
+        Get.back(); // закрыть диалог
+        Get.to(() => const AuthScreen());
+      },
+    );
   }
 
   @override
@@ -38,7 +68,7 @@ class _MainScreenState extends State<MainScreen> {
       body: _pages[_currentIndex],
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
-        onTap: (index) => setState(() => _currentIndex = index),
+        onTap: _onTabTapped,
         selectedItemColor: AppColors.primary,
         unselectedItemColor: Colors.grey,
         type: BottomNavigationBarType.fixed,
