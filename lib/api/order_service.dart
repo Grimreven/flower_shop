@@ -1,7 +1,6 @@
 // lib/api/order_service.dart
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import '../models/cart_item.dart';
 import '../models/order_model.dart';
 
 class OrderService {

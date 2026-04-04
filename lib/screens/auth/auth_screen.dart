@@ -2,27 +2,27 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:flower_shop/controllers/auth_controller.dart';
 import 'package:flower_shop/main_screen.dart';
+import '../../utils/app_colors.dart';
 
 enum AuthTab { login, register }
 
 class AuthScreen extends StatefulWidget {
   final AuthTab initialTab;
 
-  const AuthScreen({Key? key, this.initialTab = AuthTab.login}) : super(key: key);
+  const AuthScreen({super.key, this.initialTab = AuthTab.login});
 
   @override
   State<AuthScreen> createState() => _AuthScreenState();
 }
 
-class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateMixin {
+class _AuthScreenState extends State<AuthScreen>
+    with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
-  // Login controllers
   final _loginEmailController = TextEditingController();
   final _loginPasswordController = TextEditingController();
   bool _loginLoading = false;
 
-  // Register controllers
   final _registerNameController = TextEditingController();
   final _registerEmailController = TextEditingController();
   final _registerPasswordController = TextEditingController();
@@ -51,7 +51,8 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
   }
 
   Future<void> _login() async {
-    if (_loginEmailController.text.isEmpty || _loginPasswordController.text.isEmpty) {
+    if (_loginEmailController.text.isEmpty ||
+        _loginPasswordController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Заполните все поля')),
       );
@@ -67,7 +68,6 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
       );
 
       if (success) {
-        // Переход на главный экран
         if (!mounted) return;
         Get.offAll(() => const MainScreen());
       } else {
@@ -124,40 +124,109 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
     }
   }
 
+  InputDecoration _decoration(BuildContext context, String label, IconData icon) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return InputDecoration(
+      labelText: label,
+      prefixIcon: Icon(
+        icon,
+        color: isDark ? AppColors.purpleLight : AppColors.primary,
+      ),
+    );
+  }
+
+  Widget _submitButton({
+    required BuildContext context,
+    required bool isLoading,
+    required VoidCallback onPressed,
+    required String title,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    if (isLoading) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        child: CircularProgressIndicator(
+          color: isDark ? AppColors.purple : AppColors.primary,
+        ),
+      );
+    }
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: isDark
+            ? AppColors.darkBrandGradient
+            : AppColors.brandGradient,
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: [
+          BoxShadow(
+            color: (isDark ? AppColors.purple : AppColors.primary)
+                .withValues(alpha: 0.18),
+            blurRadius: 16,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: ElevatedButton(
+        onPressed: onPressed,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.transparent,
+          shadowColor: Colors.transparent,
+          foregroundColor: Colors.white,
+          minimumSize: const Size.fromHeight(54),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+          ),
+        ),
+        child: Text(title),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardColor = Theme.of(context).cardColor;
+    final onSurface = Theme.of(context).colorScheme.onSurface;
+    final borderColor = isDark ? AppColors.darkBorder : AppColors.border;
+
+    final bgGradient = isDark
+        ? const [
+      AppColors.darkBackground,
+      AppColors.darkBackgroundSecondary,
+    ]
+        : const [
+      Color(0xFFFFF2F5),
+      Color(0xFFFCE3EA),
+    ];
+
     return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.pinkAccent),
-          onPressed: () => Navigator.pop(context),
-        ),
-      ),
-      extendBodyBehindAppBar: true,
-      body: Stack(
-        children: [
-          Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                colors: [Color(0xFFFED6E3), Color(0xFFFFC1C1)],
-                begin: Alignment.topRight,
-                end: Alignment.bottomLeft,
-              ),
-            ),
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: bgGradient,
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
           ),
-          Center(
+        ),
+        child: SafeArea(
+          child: Center(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(20),
               child: Container(
+                constraints: const BoxConstraints(maxWidth: 460),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.9),
-                  borderRadius: BorderRadius.circular(24),
+                  gradient: isDark ? AppColors.darkCardGradient : null,
+                  color: isDark ? null : cardColor,
+                  borderRadius: BorderRadius.circular(30),
+                  border: Border.all(color: borderColor),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.pinkAccent.withOpacity(0.2),
-                      blurRadius: 20,
+                      color: isDark
+                          ? AppColors.purple.withValues(alpha: 0.08)
+                          : AppColors.shadow,
+                      blurRadius: 24,
                       offset: const Offset(0, 10),
                     ),
                   ],
@@ -166,114 +235,156 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Image.asset('assets/flowerLogo2.png', width: 80, height: 80),
-                    const SizedBox(height: 16),
-                    const Text(
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: IconButton(
+                        icon: Icon(
+                          Icons.arrow_back_rounded,
+                          color: isDark
+                              ? AppColors.purpleLight
+                              : AppColors.primary,
+                        ),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                    ),
+                    Container(
+                      width: 90,
+                      height: 90,
+                      decoration: BoxDecoration(
+                        gradient: isDark
+                            ? AppColors.darkBrandGradient
+                            : AppColors.brandGradient,
+                        borderRadius: BorderRadius.circular(26),
+                        boxShadow: [
+                          BoxShadow(
+                            color: (isDark ? AppColors.purple : AppColors.primary)
+                                .withValues(alpha: 0.18),
+                            blurRadius: 18,
+                            offset: const Offset(0, 8),
+                          ),
+                        ],
+                      ),
+                      padding: const EdgeInsets.all(16),
+                      child: Image.asset('assets/flowerLogo2.png'),
+                    ),
+                    const SizedBox(height: 18),
+                    Text(
                       'Добро пожаловать',
                       style: TextStyle(
                         fontSize: 28,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.pinkAccent,
+                        fontWeight: FontWeight.w800,
+                        color: onSurface,
                       ),
                     ),
                     const SizedBox(height: 8),
-                    const Text(
-                      'Войдите или создайте аккаунт для полного доступа',
+                    Text(
+                      'Войдите или создайте аккаунт для полного доступа к заказам и бонусам',
                       textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 14, color: Colors.black54),
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: isDark
+                            ? AppColors.darkMutedForeground
+                            : AppColors.mutedForeground,
+                      ),
                     ),
                     const SizedBox(height: 24),
-                    TabBar(
-                      controller: _tabController,
-                      labelColor: Colors.pinkAccent,
-                      unselectedLabelColor: Colors.grey,
-                      indicator: BoxDecoration(
-                        color: Colors.pinkAccent.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(12),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? AppColors.darkSurfaceElevated
+                            : AppColors.primaryLight,
+                        borderRadius: BorderRadius.circular(18),
+                        border: Border.all(color: borderColor),
                       ),
-                      tabs: const [Tab(text: 'Вход'), Tab(text: 'Регистрация')],
+                      child: TabBar(
+                        controller: _tabController,
+                        labelColor: Colors.white,
+                        unselectedLabelColor: isDark
+                            ? AppColors.darkMutedForeground
+                            : AppColors.mutedForeground,
+                        dividerColor: Colors.transparent,
+                        indicator: BoxDecoration(
+                          gradient: isDark
+                              ? AppColors.darkBrandGradient
+                              : AppColors.brandGradient,
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        tabs: const [
+                          Tab(text: 'Вход'),
+                          Tab(text: 'Регистрация'),
+                        ],
+                      ),
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 20),
                     SizedBox(
-                      height: 300,
+                      height: 330,
                       child: TabBarView(
                         controller: _tabController,
                         children: [
-                          // Login Tab
                           Column(
                             children: [
                               TextField(
                                 controller: _loginEmailController,
-                                decoration: const InputDecoration(
-                                  labelText: 'Email',
-                                  prefixIcon: Icon(Icons.mail_outline),
+                                decoration: _decoration(
+                                  context,
+                                  'Email',
+                                  Icons.mail_outline_rounded,
                                 ),
                               ),
-                              const SizedBox(height: 12),
+                              const SizedBox(height: 14),
                               TextField(
                                 controller: _loginPasswordController,
-                                decoration: const InputDecoration(
-                                  labelText: 'Пароль',
-                                  prefixIcon: Icon(Icons.lock_outline),
+                                decoration: _decoration(
+                                  context,
+                                  'Пароль',
+                                  Icons.lock_outline_rounded,
                                 ),
                                 obscureText: true,
                               ),
                               const SizedBox(height: 24),
-                              _loginLoading
-                                  ? const CircularProgressIndicator()
-                                  : ElevatedButton(
+                              _submitButton(
+                                context: context,
+                                isLoading: _loginLoading,
                                 onPressed: _login,
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.pinkAccent,
-                                  minimumSize: const Size.fromHeight(48),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                ),
-                                child: const Text('Войти'),
+                                title: 'Войти',
                               ),
                             ],
                           ),
-                          // Register Tab
                           Column(
                             children: [
                               TextField(
                                 controller: _registerNameController,
-                                decoration: const InputDecoration(
-                                  labelText: 'Имя',
-                                  prefixIcon: Icon(Icons.person_outline),
+                                decoration: _decoration(
+                                  context,
+                                  'Имя',
+                                  Icons.person_outline_rounded,
                                 ),
                               ),
-                              const SizedBox(height: 12),
+                              const SizedBox(height: 14),
                               TextField(
                                 controller: _registerEmailController,
-                                decoration: const InputDecoration(
-                                  labelText: 'Email',
-                                  prefixIcon: Icon(Icons.mail_outline),
+                                decoration: _decoration(
+                                  context,
+                                  'Email',
+                                  Icons.mail_outline_rounded,
                                 ),
                               ),
-                              const SizedBox(height: 12),
+                              const SizedBox(height: 14),
                               TextField(
                                 controller: _registerPasswordController,
-                                decoration: const InputDecoration(
-                                  labelText: 'Пароль',
-                                  prefixIcon: Icon(Icons.lock_outline),
+                                decoration: _decoration(
+                                  context,
+                                  'Пароль',
+                                  Icons.lock_outline_rounded,
                                 ),
                                 obscureText: true,
                               ),
                               const SizedBox(height: 24),
-                              _registerLoading
-                                  ? const CircularProgressIndicator()
-                                  : ElevatedButton(
+                              _submitButton(
+                                context: context,
+                                isLoading: _registerLoading,
                                 onPressed: _register,
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.pinkAccent,
-                                  minimumSize: const Size.fromHeight(48),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                ),
-                                child: const Text('Создать аккаунт'),
+                                title: 'Создать аккаунт',
                               ),
                             ],
                           ),
@@ -285,7 +396,7 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
               ),
             ),
           ),
-        ],
+        ),
       ),
     );
   }

@@ -42,11 +42,9 @@ app.post("/register", async (req, res) => {
   const { name, email, password } = req.body;
 
   try {
-    // Хэшируем пароль
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    // Создаём пользователя
     const result = await pool.query(
       `INSERT INTO customers (name, email, password_hash)
        VALUES ($1, $2, $3) RETURNING id, name, email`,
@@ -55,14 +53,12 @@ app.post("/register", async (req, res) => {
 
     const user = result.rows[0];
 
-    // Создаём базовую карту лояльности (Bronze)
     await pool.query(
       `INSERT INTO loyalty_accounts (user_id, points, level, total_spent)
        VALUES ($1, $2, $3, $4)`,
       [user.id, 0, 'Bronze', 0]
     );
 
-    // Генерируем JWT
     const token = jwt.sign(
       { id: user.id, email: user.email },
       process.env.JWT_SECRET || "mysecret",
@@ -91,7 +87,6 @@ app.post("/login", async (req, res) => {
     if (result.rows.length === 0) return res.status(400).json({ message: "Пользователь не найден" });
 
     const user = result.rows[0];
-
     const isMatch = await bcrypt.compare(password, user.password_hash);
     if (!isMatch) return res.status(400).json({ message: "Неверный пароль" });
 
@@ -141,8 +136,6 @@ app.get("/profile", authenticateToken, async (req, res) => {
   }
 });
 
-
-
 // ------------------- Обновление профиля -------------------
 app.put("/profile", authenticateToken, async (req, res) => {
   try {
@@ -171,7 +164,7 @@ app.post("/logout", authenticateToken, async (req, res) => {
   res.json({ message: "Выход выполнен успешно" });
 });
 
-// 🔹 Получить все товары
+// ------------------- Товары -------------------
 app.get("/products", async (req, res) => {
   try {
     const result = await pool.query(`
@@ -187,7 +180,6 @@ app.get("/products", async (req, res) => {
   }
 });
 
-// 🔹 Получить популярные товары
 app.get("/products/popular", async (req, res) => {
   try {
     const result = await pool.query(`
@@ -203,6 +195,57 @@ app.get("/products/popular", async (req, res) => {
     res.status(500).json({ message: "Ошибка сервера" });
   }
 });
+
+app.get("/products/:id/reviews", async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT r.*, c.name AS user_name
+      FROM reviews r
+      LEFT JOIN customers c ON c.id = r.user_id
+      WHERE r.product_id = $1
+      ORDER BY r.created_at DESC
+    `, [req.params.id]);
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Ошибка GET /products/:id/reviews:", err);
+    res.status(500).json({ message: "Ошибка сервера" });
+  }
+});
+
+// ------------------- Динамика цен -------------------
+app.get("/products/:id/price-history", async (req, res) => {
+  try {
+    const productId = req.params.id;
+    const result = await pool.query(
+      `SELECT price, changed_at
+       FROM product_prices_history
+       WHERE product_id = $1
+       ORDER BY changed_at ASC`,
+      [productId]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Ошибка GET /products/:id/price-history:", err);
+    res.status(500).json({ message: "Ошибка сервера" });
+  }
+});
+
+//// 🔹 Получить популярные товары
+//app.get("/products/popular", async (req, res) => {
+//  try {
+//    const result = await pool.query(`
+//      SELECT p.*, c.name AS category_name
+//      FROM products p
+//      LEFT JOIN categories c ON c.id = p.category_id
+//      ORDER BY p.rating DESC NULLS LAST, p.id DESC
+//      LIMIT 6;
+//    `);
+//    res.json(result.rows);
+//  } catch (err) {
+//    console.error("Ошибка GET /products/popular:", err);
+//    res.status(500).json({ message: "Ошибка сервера" });
+//  }
+//});
 
 app.get("/products/:id/reviews", async (req, res) => {
   try {

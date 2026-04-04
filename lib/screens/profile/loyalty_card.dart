@@ -6,6 +6,7 @@ class LoyaltyCard extends StatelessWidget {
   final double totalSpent;
   final int nextLevelPoints;
   final String colorHex;
+  final String nextLevelLabel;
 
   const LoyaltyCard({
     super.key,
@@ -14,56 +15,107 @@ class LoyaltyCard extends StatelessWidget {
     required this.totalSpent,
     required this.nextLevelPoints,
     required this.colorHex,
+    required this.nextLevelLabel,
   });
 
   Color getColor(String hexColor) {
     String hex = hexColor.replaceAll('#', '');
-    if (hex.length == 6) hex = 'FF$hex'; // добавляем альфу
+    if (hex.length == 6) {
+      hex = 'FF$hex';
+    }
     return Color(int.parse(hex, radix: 16));
+  }
+
+  String get medal {
+    switch (level.toLowerCase()) {
+      case 'silver':
+        return '🥈';
+      case 'gold':
+        return '🥇';
+      default:
+        return '🥉';
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    double progress = points / nextLevelPoints;
-    if (progress > 1) progress = 1;
+    double progress = nextLevelPoints > 0 ? points / nextLevelPoints : 1;
+    if (progress > 1) {
+      progress = 1;
+    }
 
-    return Card(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      color: getColor(colorHex),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              "$level карта",
-              style: const TextStyle(
-                  fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
+    final Color baseColor = getColor(colorHex);
+    final bool isMaxLevel = level.toLowerCase() == 'gold';
+
+    return Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            baseColor,
+            baseColor.withValues(alpha: 0.82),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(26),
+        boxShadow: [
+          BoxShadow(
+            color: baseColor.withValues(alpha: 0.28),
+            blurRadius: 18,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '$medal $level карта',
+            style: const TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.w800,
+              color: Colors.white,
             ),
-            const SizedBox(height: 8),
-            Text(
-              "$points баллов",
-              style: const TextStyle(fontSize: 16, color: Colors.white70),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            '$points баллов',
+            style: const TextStyle(
+              fontSize: 16,
+              color: Colors.white70,
+              fontWeight: FontWeight.w500,
             ),
-            const SizedBox(height: 8),
-            LinearProgressIndicator(
+          ),
+          const SizedBox(height: 14),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(999),
+            child: LinearProgressIndicator(
               value: progress,
               color: Colors.white,
               backgroundColor: Colors.white30,
-              minHeight: 8,
+              minHeight: 10,
             ),
-            const SizedBox(height: 8),
-            Text(
-              "До следующего уровня: ${nextLevelPoints - points} баллов",
-              style: const TextStyle(fontSize: 14, color: Colors.white70),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            isMaxLevel
+                ? 'Максимальный уровень программы лояльности достигнут'
+                : 'До уровня $nextLevelLabel: ${(nextLevelPoints - points).clamp(0, 1 << 30)} баллов',
+            style: const TextStyle(
+              fontSize: 14,
+              color: Colors.white70,
             ),
-            const SizedBox(height: 8),
-            Text(
-              "Всего потрачено: \$${totalSpent.toStringAsFixed(2)}",
-              style: const TextStyle(fontSize: 14, color: Colors.white70),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'Всего покупок: ${totalSpent.toStringAsFixed(0)} ₽',
+            style: const TextStyle(
+              fontSize: 14,
+              color: Colors.white70,
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

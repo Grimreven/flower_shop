@@ -9,6 +9,7 @@ class Product {
   final bool inStock;
   final double rating;
   final List<String>? care;
+  final List<PriceHistory>? priceHistory;
 
   Product({
     required this.id,
@@ -21,6 +22,7 @@ class Product {
     required this.inStock,
     required this.rating,
     this.care,
+    this.priceHistory,
   });
 
   factory Product.fromJson(Map<String, dynamic> json) {
@@ -42,4 +44,11 @@ class Product {
       care: careList,
     );
   }
+}
+
+class PriceHistory {
+  final double price;
+  final DateTime changedAt;
+
+  PriceHistory({required this.price, required this.changedAt});
 }

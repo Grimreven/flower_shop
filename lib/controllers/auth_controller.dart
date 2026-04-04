@@ -10,18 +10,20 @@ class AuthController extends GetxController {
   var token = ''.obs;
   var user = Rxn<User>();
 
-  bool get isLoggedIn => token.isNotEmpty;
+  bool get isLoggedIn => token.value.isNotEmpty;
 
   @override
   void onInit() {
     super.onInit();
-    _loadToken();
+    // УБРАЛИ загрузку отсюда
   }
 
-  Future<void> _loadToken() async {
+  // ✅ Теперь метод публичный
+  Future<void> loadToken() async {
     final prefs = await SharedPreferences.getInstance();
     token.value = prefs.getString('token') ?? '';
-    if (token.isNotEmpty) {
+
+    if (token.value.isNotEmpty) {
       await getProfile();
     }
   }
@@ -35,6 +37,7 @@ class AuthController extends GetxController {
   Future<bool> login(String email, String password) async {
     try {
       final result = await _authService.login(email, password);
+
       if (result != null && result['token'] != null) {
         await _saveToken(result['token']);
         await getProfile();
@@ -45,7 +48,8 @@ class AuthController extends GetxController {
         return false;
       }
     } catch (e) {
-      Get.snackbar('Ошибка', e.toString(), snackPosition: SnackPosition.BOTTOM);
+      Get.snackbar('Ошибка', e.toString(),
+          snackPosition: SnackPosition.BOTTOM);
       return false;
     }
   }
@@ -53,6 +57,7 @@ class AuthController extends GetxController {
   Future<bool> register(String name, String email, String password) async {
     try {
       final result = await _authService.register(name, email, password);
+
       if (result != null && result['token'] != null) {
         await _saveToken(result['token']);
         await getProfile();
@@ -63,7 +68,8 @@ class AuthController extends GetxController {
         return false;
       }
     } catch (e) {
-      Get.snackbar('Ошибка', e.toString(), snackPosition: SnackPosition.BOTTOM);
+      Get.snackbar('Ошибка', e.toString(),
+          snackPosition: SnackPosition.BOTTOM);
       return false;
     }
   }
@@ -73,11 +79,14 @@ class AuthController extends GetxController {
     await prefs.remove('token');
     token.value = '';
     user.value = null;
-    Get.snackbar('Выход', 'Вы успешно вышли', snackPosition: SnackPosition.BOTTOM);
+
+    Get.snackbar('Выход', 'Вы успешно вышли',
+        snackPosition: SnackPosition.BOTTOM);
   }
 
   Future<User?> getProfile() async {
-    if (token.isEmpty) return null;
+    if (token.value.isEmpty) return null;
+
     try {
       final data = await _authService.getProfile(token.value);
       if (data != null) {
@@ -92,9 +101,12 @@ class AuthController extends GetxController {
   }
 
   Future<User?> updateProfile(User updatedUser) async {
-    if (token.isEmpty) return null;
+    if (token.value.isEmpty) return null;
+
     try {
-      final data = await _authService.updateProfile(token.value, updatedUser);
+      final data =
+      await _authService.updateProfile(token.value, updatedUser);
+
       if (data != null) {
         user.value = User.fromJson(data);
       }
@@ -106,12 +118,15 @@ class AuthController extends GetxController {
     }
   }
 
-  // ✅ Новый метод для изменения бонусов — через copyWith (User.loyaltyPoints остаётся final)
   void updateLoyaltyPoints(int delta) {
     final currentUser = user.value;
+
     if (currentUser != null) {
-      final newPoints = (currentUser.loyaltyPoints + delta).clamp(0, 1 << 30);
-      user.value = currentUser.copyWith(loyaltyPoints: newPoints.toInt());
+      final newPoints =
+      (currentUser.loyaltyPoints + delta).clamp(0, 1 << 30);
+
+      user.value =
+          currentUser.copyWith(loyaltyPoints: newPoints.toInt());
     }
   }
 }

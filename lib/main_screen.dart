@@ -16,23 +16,31 @@ class MainScreen extends StatefulWidget {
 }
 
 class _MainScreenState extends State<MainScreen> {
-  int _currentIndex = 0;
+  late int _currentIndex;
   final AuthController authController = Get.find<AuthController>();
 
-  final List<Widget> _pages = const [
-    HomeScreen(),
-    CartScreen(),
-    OrdersScreen(),
-    ProfileScreen(),
-  ];
+  late final List<Widget> _pages;
 
-  /// Проверяем авторизацию перед переходом
+  @override
+  void initState() {
+    super.initState();
+
+    _pages = [
+      const HomeScreen(),
+      const CartScreen(),
+      const OrdersScreen(),
+      const ProfileScreen(),
+    ];
+
+    final args = Get.arguments;
+    _currentIndex =
+    (args is Map && args['tabIndex'] is int) ? args['tabIndex'] as int : 0;
+  }
+
   Future<void> _onTabTapped(int index) async {
-    // вкладки, где нужна авторизация
-    final restrictedTabs = [1, 2, 3]; // корзина, заказы, профиль
+    final restrictedTabs = [1, 2, 3];
 
     if (restrictedTabs.contains(index) && authController.token.isEmpty) {
-      // пользователь не авторизован
       _showAuthDialog();
       return;
     }
@@ -49,14 +57,15 @@ class _MainScreenState extends State<MainScreen> {
         color: AppColors.primary,
       ),
       middleText:
-      "Чтобы просмотреть эту страницу, пожалуйста, авторизуйтесь или зарегистрируйтесь.",
+      "Чтобы открыть этот раздел, пожалуйста, авторизуйтесь или зарегистрируйтесь.",
       textConfirm: "Войти",
       textCancel: "Отмена",
       confirmTextColor: Colors.white,
       buttonColor: AppColors.primary,
       cancelTextColor: AppColors.mutedForeground,
+      radius: 20,
       onConfirm: () {
-        Get.back(); // закрыть диалог
+        Get.back();
         Get.to(() => const AuthScreen());
       },
     );
@@ -64,20 +73,61 @@ class _MainScreenState extends State<MainScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final surface = Theme.of(context).colorScheme.surface;
+    final borderColor = isDark ? AppColors.darkBorder : AppColors.border;
+
     return Scaffold(
-      body: _pages[_currentIndex],
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        onTap: _onTabTapped,
-        selectedItemColor: AppColors.primary,
-        unselectedItemColor: Colors.grey,
-        type: BottomNavigationBarType.fixed,
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Главная'),
-          BottomNavigationBarItem(icon: Icon(Icons.shopping_cart), label: 'Корзина'),
-          BottomNavigationBarItem(icon: Icon(Icons.receipt_long), label: 'Заказы'),
-          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Профиль'),
-        ],
+      body: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 250),
+        child: _pages[_currentIndex],
+      ),
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          color: surface,
+          border: Border(
+            top: BorderSide(color: borderColor),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: isDark
+                  ? AppColors.purple.withValues(alpha: 0.05)
+                  : AppColors.shadow,
+              blurRadius: 20,
+              offset: const Offset(0, -4),
+            ),
+          ],
+        ),
+        child: BottomNavigationBar(
+          currentIndex: _currentIndex,
+          onTap: _onTabTapped,
+          selectedItemColor: isDark ? AppColors.purple : AppColors.primary,
+          unselectedItemColor: isDark
+              ? AppColors.darkMutedForeground
+              : AppColors.mutedForeground,
+          type: BottomNavigationBarType.fixed,
+          backgroundColor: surface,
+          elevation: 0,
+          selectedLabelStyle: const TextStyle(fontWeight: FontWeight.w600),
+          items: const [
+            BottomNavigationBarItem(
+              icon: Icon(Icons.home_rounded),
+              label: 'Главная',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.shopping_cart_rounded),
+              label: 'Корзина',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.receipt_long_rounded),
+              label: 'Заказы',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.person_rounded),
+              label: 'Профиль',
+            ),
+          ],
+        ),
       ),
     );
   }
