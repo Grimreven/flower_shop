@@ -75,7 +75,7 @@ class SmartBouquetEntryCard extends StatelessWidget {
                   ),
                   SizedBox(height: 6),
                   Text(
-                    'Ответьте на 4 вопроса и получите идеальный букет под ваш запрос',
+                    'Ответьте на 6 вопросов и получите идеальный букет под ваш запрос',
                     style: TextStyle(
                       color: Colors.white,
                       height: 1.4,
