@@ -5,7 +5,7 @@ import '../models/product.dart';
 
 class CartService {
   final AuthController authController;
-  final String baseUrl = 'http://10.0.2.2:3000'; // для эмулятора Android
+  final String baseUrl = 'http://127.0.0.1:3000';
 
   CartService({required this.authController});
 

@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import '../../models/product.dart';
+
 import '../../api/api_service.dart';
+import '../../controllers/auth_controller.dart';
 import '../../controllers/cart_controller.dart';
+import '../../models/product.dart';
+import '../../utils/app_colors.dart';
 import '../../widgets/product_card.dart';
 import '../../widgets/product_detail.dart';
-import '../../utils/app_colors.dart';
-import 'package:flower_shop/controllers/auth_controller.dart';
+import '../../widgets/smart_bouquet_entry_card.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -17,6 +19,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final CartController cartController = Get.find<CartController>();
+  final AuthController authController = Get.find<AuthController>();
 
   List<Product> allProducts = [];
   List<Product> popularProducts = [];
@@ -37,10 +40,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _loadProducts() async {
     setState(() => isLoading = true);
+
     try {
-      final all = await ApiService.fetchAllProducts();
-      final popular = await ApiService.fetchPopularProducts();
-      final newItems = all.length >= 4
+      final List<Product> all = await ApiService.fetchAllProducts();
+      final List<Product> popular = await ApiService.fetchPopularProducts();
+      final List<Product> newItems = all.length >= 4
           ? all.sublist(all.length - 4).reversed.toList()
           : all.reversed.toList();
 
@@ -61,23 +65,29 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (searchQuery.isNotEmpty) {
       temp = temp
-          .where((p) =>
-      p.name.toLowerCase().contains(searchQuery.toLowerCase()) ||
-          p.description.toLowerCase().contains(searchQuery.toLowerCase()))
+          .where(
+            (Product p) =>
+        p.name.toLowerCase().contains(searchQuery.toLowerCase()) ||
+            p.description.toLowerCase().contains(searchQuery.toLowerCase()),
+      )
           .toList();
     }
 
     if (selectedCategories.isNotEmpty) {
-      temp =
-          temp.where((p) => selectedCategories.contains(p.categoryName)).toList();
+      temp = temp
+          .where((Product p) => selectedCategories.contains(p.categoryName))
+          .toList();
     }
 
     temp = temp
-        .where((p) => p.price >= priceRange.start && p.price <= priceRange.end)
+        .where(
+          (Product p) =>
+      p.price >= priceRange.start && p.price <= priceRange.end,
+    )
         .toList();
 
     if (inStockOnly) {
-      temp = temp.where((p) => p.inStock).toList();
+      temp = temp.where((Product p) => p.inStock).toList();
     }
 
     setState(() {
@@ -93,6 +103,7 @@ class _HomeScreenState extends State<HomeScreen> {
         selectedCategories.add(category);
       }
     });
+
     _applyFilters();
   }
 
@@ -113,91 +124,77 @@ class _HomeScreenState extends State<HomeScreen> {
         builder: (_) => ProductDetail(
           product: product,
           cartController: cartController,
-          authController: Get.find(),
+          authController: authController,
         ),
       ),
     );
   }
 
-  Widget _buildHeader(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final onSurface = Theme.of(context).colorScheme.onSurface;
-    final borderColor =
-    isDark ? AppColors.darkBorder : AppColors.border;
+  void _handleSmartBouquetResult(dynamic selectedProduct) {
+    if (selectedProduct is Product) {
+      _openProductDetail(selectedProduct);
+      return;
+    }
 
+    try {
+      _openProductDetail(selectedProduct as Product);
+    } catch (_) {
+      Get.snackbar(
+        'Умный букет',
+        'Букет подобран, но не удалось открыть карточку товара',
+        snackPosition: SnackPosition.BOTTOM,
+      );
+    }
+  }
+
+  Widget _buildHeader() {
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 12, 16, 8),
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        gradient: isDark
-            ? const LinearGradient(
-          colors: [Color(0xFF1D1D2D), Color(0xFF28283E)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        )
-            : const LinearGradient(
+        gradient: const LinearGradient(
           colors: [Color(0xFFFFEEF2), Color(0xFFFFF8FA)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        borderRadius: BorderRadius.circular(28),
-        border: Border.all(color: borderColor),
-        boxShadow: [
-          BoxShadow(
-            color: isDark
-                ? AppColors.purple.withValues(alpha: 0.08)
-                : AppColors.shadow,
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-          ),
-        ],
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: AppColors.border),
       ),
       child: Row(
         children: [
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+              children: const [
                 Text(
                   'Подберите идеальный букет',
                   style: TextStyle(
                     fontSize: 22,
-                    fontWeight: FontWeight.w800,
-                    color: onSurface,
-                    height: 1.1,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.foreground,
                   ),
                 ),
-                const SizedBox(height: 8),
+                SizedBox(height: 8),
                 Text(
                   'Свежие цветы, стильные композиции и быстрая доставка',
                   style: TextStyle(
                     fontSize: 14,
-                    color: isDark
-                        ? AppColors.darkMutedForeground
-                        : AppColors.mutedForeground,
+                    color: AppColors.mutedForeground,
                   ),
                 ),
               ],
             ),
           ),
           Container(
-            width: 66,
-            height: 66,
+            width: 62,
+            height: 62,
             decoration: BoxDecoration(
-              gradient: isDark ? AppColors.darkBrandGradient : AppColors.brandGradient,
-              borderRadius: BorderRadius.circular(20),
-              boxShadow: [
-                BoxShadow(
-                  color: (isDark ? AppColors.purple : AppColors.primary)
-                      .withValues(alpha: 0.18),
-                  blurRadius: 18,
-                  offset: const Offset(0, 8),
-                ),
-              ],
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(18),
             ),
             child: const Icon(
               Icons.local_florist_rounded,
-              color: Colors.white,
+              color: AppColors.primary,
               size: 32,
             ),
           ),
@@ -206,40 +203,48 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildFilters(BuildContext context) {
-    final categories = allProducts.map((p) => p.categoryName).toSet().toList();
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final cardColor = Theme.of(context).cardColor;
-    final onSurface = Theme.of(context).colorScheme.onSurface;
-    final borderColor =
-    isDark ? AppColors.darkBorder : AppColors.border;
+  Widget _buildSmartBouquetBlock() {
+    if (allProducts.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      child: SmartBouquetEntryCard(
+        products: allProducts,
+        onProductSelected: _handleSmartBouquetResult,
+      ),
+    );
+  }
+
+  Widget _buildFilters() {
+    final List<String> categories =
+    allProducts.map((Product p) => p.categoryName).toSet().toList();
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: cardColor,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: borderColor),
-        boxShadow: [
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: AppColors.border),
+        boxShadow: const [
           BoxShadow(
-            color: isDark
-                ? AppColors.purple.withValues(alpha: 0.04)
-                : AppColors.shadow,
-            blurRadius: 18,
-            offset: const Offset(0, 8),
+            color: AppColors.shadow,
+            blurRadius: 16,
+            offset: Offset(0, 6),
           ),
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
+          const Text(
             'Фильтры',
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w700,
-              color: onSurface,
+              color: AppColors.foreground,
             ),
           ),
           const SizedBox(height: 12),
@@ -248,25 +253,20 @@ class _HomeScreenState extends State<HomeScreen> {
             runSpacing: 8,
             children: [
               ...categories.map(
-                    (c) => FilterChip(
+                    (String c) => FilterChip(
                   label: Text(c),
                   selected: selectedCategories.contains(c),
-                  selectedColor: isDark
-                      ? AppColors.purple.withValues(alpha: 0.18)
-                      : AppColors.primaryLight,
-                  side: BorderSide(color: borderColor),
-                  checkmarkColor: isDark ? AppColors.purpleLight : AppColors.primary,
+                  selectedColor: AppColors.primaryLight,
+                  side: const BorderSide(color: AppColors.border),
+                  checkmarkColor: AppColors.primary,
                   onSelected: (_) => _toggleCategory(c),
                 ),
               ),
               FilterChip(
                 label: const Text('В наличии'),
                 selected: inStockOnly,
-                selectedColor: isDark
-                    ? AppColors.purple.withValues(alpha: 0.18)
-                    : AppColors.primaryLight,
-                side: BorderSide(color: borderColor),
-                checkmarkColor: isDark ? AppColors.purpleLight : AppColors.primary,
+                selectedColor: AppColors.primaryLight,
+                side: const BorderSide(color: AppColors.border),
                 onSelected: (_) {
                   setState(() {
                     inStockOnly = !inStockOnly;
@@ -276,46 +276,52 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               TextButton(
                 onPressed: _clearFilters,
-                child: Text(
-                  'Очистить',
-                  style: TextStyle(
-                    color: isDark ? AppColors.purpleLight : AppColors.primary,
-                  ),
-                ),
+                child: const Text('Очистить'),
               ),
             ],
           ),
           const SizedBox(height: 12),
-          Text(
+          const Text(
             'Цена',
             style: TextStyle(
               fontWeight: FontWeight.w600,
-              color: onSurface,
+              color: AppColors.foreground,
             ),
           ),
-          SliderTheme(
-            data: SliderTheme.of(context).copyWith(
-              activeTrackColor: isDark ? AppColors.purple : AppColors.primary,
-              thumbColor: isDark ? AppColors.purple : AppColors.primary,
-              overlayColor: (isDark ? AppColors.purple : AppColors.primary)
-                  .withValues(alpha: 0.15),
-              inactiveTrackColor: isDark
-                  ? AppColors.darkBorderSoft
-                  : AppColors.primaryLight,
+          RangeSlider(
+            min: 0,
+            max: 10000,
+            divisions: 100,
+            values: priceRange,
+            activeColor: AppColors.primary,
+            inactiveColor: AppColors.primaryLight,
+            labels: RangeLabels(
+              '${priceRange.start.toStringAsFixed(0)} ₽',
+              '${priceRange.end.toStringAsFixed(0)} ₽',
             ),
-            child: RangeSlider(
-              min: 0,
-              max: 10000,
-              divisions: 100,
-              values: priceRange,
-              labels: RangeLabels(
-                '${priceRange.start.toStringAsFixed(0)} ₽',
-                '${priceRange.end.toStringAsFixed(0)} ₽',
+            onChanged: (RangeValues range) {
+              setState(() => priceRange = range);
+              _applyFilters();
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _sectionTitle(String title) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 22, 16, 12),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              title,
+              style: const TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.w700,
+                color: AppColors.foreground,
               ),
-              onChanged: (range) {
-                setState(() => priceRange = range);
-                _applyFilters();
-              },
             ),
           ),
         ],
@@ -323,37 +329,20 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _sectionTitle(BuildContext context, String title) {
-    final onSurface = Theme.of(context).colorScheme.onSurface;
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 22, 16, 12),
-      child: Text(
-        title,
-        style: TextStyle(
-          fontSize: 22,
-          fontWeight: FontWeight.w800,
-          color: onSurface,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSection(
-      BuildContext context,
-      String title,
-      List<Product> products,
-      ) {
-    final displayProducts = filteredProducts.isEmpty && searchQuery.isNotEmpty
+  Widget _buildSection(String title, List<Product> products) {
+    final List<Product> displayProducts =
+    filteredProducts.isEmpty && searchQuery.isNotEmpty
         ? []
-        : products.where((p) => filteredProducts.contains(p)).toList();
+        : products.where((Product p) => filteredProducts.contains(p)).toList();
 
-    if (displayProducts.isEmpty) return const SizedBox.shrink();
+    if (displayProducts.isEmpty) {
+      return const SizedBox.shrink();
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _sectionTitle(context, title),
+        _sectionTitle(title),
         GridView.builder(
           physics: const NeverScrollableScrollPhysics(),
           shrinkWrap: true,
@@ -365,15 +354,16 @@ class _HomeScreenState extends State<HomeScreen> {
             mainAxisSpacing: 12,
           ),
           itemCount: displayProducts.length,
-          itemBuilder: (context, index) {
-            final product = displayProducts[index];
+          itemBuilder: (BuildContext context, int index) {
+            final Product product = displayProducts[index];
+
             return ProductCard(
               product: product,
               cartController: cartController,
-              authController: Get.find(),
+              authController: authController,
               onViewDetails: () => _openProductDetail(product),
               onAddToCart: () async {
-                if (!Get.find<AuthController>().isLoggedIn) {
+                if (!authController.isLoggedIn) {
                   Get.snackbar(
                     'Ошибка',
                     'Сначала войдите в профиль',
@@ -381,7 +371,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   );
                   return;
                 }
+
                 await cartController.addToCart(product);
+
                 Get.snackbar(
                   'Добавлено',
                   '${product.name} в корзину',
@@ -395,22 +387,17 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildSearchBar(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
+  Widget _buildSearchBar() {
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 8, 16, 8),
       child: TextField(
-        onChanged: (value) {
+        onChanged: (String value) {
           setState(() => searchQuery = value);
           _applyFilters();
         },
         decoration: InputDecoration(
           hintText: 'Поиск цветов...',
-          prefixIcon: Icon(
-            Icons.search_rounded,
-            color: isDark ? AppColors.purpleLight : AppColors.primary,
-          ),
+          prefixIcon: const Icon(Icons.search_rounded),
           suffixIcon: searchQuery.isNotEmpty
               ? IconButton(
             icon: const Icon(Icons.close_rounded),
@@ -427,63 +414,42 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final bg = Theme.of(context).scaffoldBackgroundColor;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final onSurface = Theme.of(context).colorScheme.onSurface;
-
     return Scaffold(
-      backgroundColor: bg,
-      body: Container(
-        decoration: BoxDecoration(
-          gradient: isDark
-              ? const LinearGradient(
-            colors: [
-              AppColors.darkBackground,
-              AppColors.darkBackgroundSecondary,
-            ],
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-          )
-              : null,
-        ),
-        child: SafeArea(
-          child: isLoading
-              ? Center(
-            child: CircularProgressIndicator(
-              color: isDark ? AppColors.purple : AppColors.primary,
-            ),
-          )
-              : RefreshIndicator(
-            onRefresh: _loadProducts,
-            color: isDark ? AppColors.purple : AppColors.primary,
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.only(bottom: 24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildHeader(context),
-                  _buildSearchBar(context),
-                  _buildFilters(context),
-                  _buildSection(context, 'Популярное', popularProducts),
-                  _buildSection(context, 'Новинки', newProducts),
-                  _buildSection(context, 'Все товары', allProducts),
-                  if (filteredProducts.isEmpty)
-                    Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Center(
-                        child: Text(
-                          'Товары не найдены',
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: isDark
-                                ? AppColors.darkMutedForeground
-                                : onSurface.withValues(alpha: 0.6),
-                          ),
+      backgroundColor: AppColors.background,
+      body: SafeArea(
+        child: isLoading
+            ? const Center(
+          child: CircularProgressIndicator(color: AppColors.primary),
+        )
+            : RefreshIndicator(
+          onRefresh: _loadProducts,
+          color: AppColors.primary,
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.only(bottom: 24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildHeader(),
+                _buildSmartBouquetBlock(),
+                _buildSearchBar(),
+                _buildFilters(),
+                _buildSection('Популярное', popularProducts),
+                _buildSection('Новинки', newProducts),
+                _buildSection('Все товары', allProducts),
+                if (filteredProducts.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.all(24),
+                    child: Center(
+                      child: Text(
+                        'Товары не найдены',
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: AppColors.mutedForeground,
                         ),
                       ),
                     ),
-                ],
-              ),
+                  ),
+              ],
             ),
           ),
         ),

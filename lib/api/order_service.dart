@@ -4,12 +4,12 @@ import 'package:http/http.dart' as http;
 import '../models/order_model.dart';
 
 class OrderService {
-  final String baseUrl = 'http://10.0.2.2:3000';
+  final String baseUrl = 'http://127.0.0.1:3000';
   final String token;
 
   OrderService({required this.token});
 
-  /// itemsMaps — список картинок { 'product_id': ..., 'quantity': ... }
+
   Future<void> createOrder({required List<Map<String, dynamic>> itemsMaps}) async {
     final response = await http.post(
       Uri.parse('$baseUrl/orders'),

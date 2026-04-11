@@ -4,20 +4,17 @@ import '../models/product.dart';
 import '../models/user.dart';
 
 class ApiService {
-  // Для эмулятора Android: 10.0.2.2 = localhost
-  static const String baseUrl = 'http://10.0.2.2:3000';
+  static const String baseUrl = 'http://127.0.0.1:3000';
 
-  // ПРОДУКТЫ
   static Future<List<Product>> fetchAllProducts() async {
     try {
       final response = await http.get(Uri.parse('$baseUrl/products'));
       if (response.statusCode == 200) {
-        final List data = jsonDecode(response.body);
+        final List<dynamic> data = jsonDecode(response.body);
         return data.map((e) => Product.fromJson(e)).toList();
       }
       return [];
-    } catch (e) {
-      print('Ошибка загрузки товаров: $e');
+    } catch (_) {
       return [];
     }
   }
@@ -26,17 +23,15 @@ class ApiService {
     try {
       final response = await http.get(Uri.parse('$baseUrl/products/popular'));
       if (response.statusCode == 200) {
-        final List data = jsonDecode(response.body);
+        final List<dynamic> data = jsonDecode(response.body);
         return data.map((e) => Product.fromJson(e)).toList();
       }
       return [];
-    } catch (e) {
-      print('Ошибка загрузки популярных товаров: $e');
+    } catch (_) {
       return [];
     }
   }
 
-  // ПРОФИЛЬ
   static Future<User?> getProfile(String token) async {
     try {
       final response = await http.get(
@@ -47,8 +42,7 @@ class ApiService {
         return User.fromJson(jsonDecode(response.body));
       }
       return null;
-    } catch (e) {
-      print('Ошибка загрузки профиля: $e');
+    } catch (_) {
       return null;
     }
   }
@@ -67,39 +61,55 @@ class ApiService {
         return User.fromJson(jsonDecode(response.body));
       }
       return null;
-    } catch (e) {
-      print('Ошибка обновления профиля: $e');
+    } catch (_) {
       return null;
     }
   }
 
-  // КОРЗИНА
   static Future<List<dynamic>> getCart(String token) async {
     try {
       final response = await http.get(
         Uri.parse('$baseUrl/cart'),
         headers: {'Authorization': 'Bearer $token'},
       );
-      if (response.statusCode == 200) return jsonDecode(response.body);
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body) as List<dynamic>;
+      }
       return [];
-    } catch (e) {
-      print('Ошибка корзины: $e');
+    } catch (_) {
       return [];
     }
   }
 
-  static Future<void> addToCart(int productId, int quantity, String token) async {
+  static Future<void> addToCart(
+      int productId,
+      int quantity,
+      String token,
+      ) async {
     await http.post(
       Uri.parse('$baseUrl/cart'),
-      headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
-      body: jsonEncode({'product_id': productId, 'quantity': quantity}),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({
+        'product_id': productId,
+        'quantity': quantity,
+      }),
     );
   }
 
-  static Future<void> updateCart(int productId, int quantity, String token) async {
+  static Future<void> updateCart(
+      int productId,
+      int quantity,
+      String token,
+      ) async {
     await http.put(
       Uri.parse('$baseUrl/cart/$productId'),
-      headers: {'Authorization': 'Bearer $token', 'Content-Type': 'application/json'},
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
       body: jsonEncode({'quantity': quantity}),
     );
   }
