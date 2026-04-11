@@ -8,7 +8,7 @@ import 'main_screen.dart';
 import 'screens/order/order_success_screen.dart';
 import 'screens/order/orders_screen.dart';
 import 'utils/app_colors.dart';
-import 'services/notification_service.dart';
+import 'api/notification_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();

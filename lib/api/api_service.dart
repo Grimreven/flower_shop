@@ -1,102 +1,44 @@
-import 'dart:convert';
-import 'package:http/http.dart' as http;
 import '../models/product.dart';
 import '../models/user.dart';
+import '../api/local_demo_service.dart';
 
 class ApiService {
-  static const String baseUrl = 'http://127.0.0.1:3000';
+  static final LocalDemoService _localDemoService = LocalDemoService.instance;
 
   static Future<List<Product>> fetchAllProducts() async {
-    try {
-      final response = await http.get(Uri.parse('$baseUrl/products'));
-      if (response.statusCode == 200) {
-        final List<dynamic> data = jsonDecode(response.body);
-        return data.map((e) => Product.fromJson(e)).toList();
-      }
-      return [];
-    } catch (_) {
-      return [];
-    }
+    final List<Map<String, dynamic>> data = await _localDemoService.getProducts();
+    return data.map((e) => Product.fromJson(e)).toList();
   }
 
   static Future<List<Product>> fetchPopularProducts() async {
-    try {
-      final response = await http.get(Uri.parse('$baseUrl/products/popular'));
-      if (response.statusCode == 200) {
-        final List<dynamic> data = jsonDecode(response.body);
-        return data.map((e) => Product.fromJson(e)).toList();
-      }
-      return [];
-    } catch (_) {
-      return [];
-    }
+    final List<Map<String, dynamic>> data =
+    await _localDemoService.getPopularProducts();
+    return data.map((e) => Product.fromJson(e)).toList();
   }
 
   static Future<User?> getProfile(String token) async {
-    try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/profile'),
-        headers: {'Authorization': 'Bearer $token'},
-      );
-      if (response.statusCode == 200) {
-        return User.fromJson(jsonDecode(response.body));
-      }
-      return null;
-    } catch (_) {
+    final Map<String, dynamic>? data = await _localDemoService.getProfile(token);
+    if (data == null || data['authError'] == true) {
       return null;
     }
+    return User.fromJson(data);
   }
 
   static Future<User?> updateProfile(String token, User user) async {
-    try {
-      final response = await http.put(
-        Uri.parse('$baseUrl/profile'),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode(user.toJson()),
-      );
-      if (response.statusCode == 200) {
-        return User.fromJson(jsonDecode(response.body));
-      }
-      return null;
-    } catch (_) {
+    final Map<String, dynamic>? data =
+    await _localDemoService.updateProfile(token, user.toJson());
+    if (data == null || data['authError'] == true) {
       return null;
     }
+    return User.fromJson(data);
   }
 
   static Future<List<dynamic>> getCart(String token) async {
-    try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/cart'),
-        headers: {'Authorization': 'Bearer $token'},
-      );
-      if (response.statusCode == 200) {
-        return jsonDecode(response.body) as List<dynamic>;
-      }
-      return [];
-    } catch (_) {
-      return [];
-    }
+    return _localDemoService.getCart(token);
   }
 
-  static Future<void> addToCart(
-      int productId,
-      int quantity,
-      String token,
-      ) async {
-    await http.post(
-      Uri.parse('$baseUrl/cart'),
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-      },
-      body: jsonEncode({
-        'product_id': productId,
-        'quantity': quantity,
-      }),
-    );
+  static Future<void> addToCart(int productId, int quantity, String token) async {
+    await _localDemoService.addToCart(token, productId, quantity);
   }
 
   static Future<void> updateCart(
@@ -104,20 +46,14 @@ class ApiService {
       int quantity,
       String token,
       ) async {
-    await http.put(
-      Uri.parse('$baseUrl/cart/$productId'),
-      headers: {
-        'Authorization': 'Bearer $token',
-        'Content-Type': 'application/json',
-      },
-      body: jsonEncode({'quantity': quantity}),
-    );
+    await _localDemoService.updateCart(token, productId, quantity);
   }
 
   static Future<void> removeFromCart(int productId, String token) async {
-    await http.delete(
-      Uri.parse('$baseUrl/cart/$productId'),
-      headers: {'Authorization': 'Bearer $token'},
-    );
+    await _localDemoService.removeFromCart(token, productId);
+  }
+
+  static Future<void> clearCart(String token) async {
+    await _localDemoService.clearCart(token);
   }
 }

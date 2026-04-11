@@ -5,7 +5,8 @@ import '../../controllers/auth_controller.dart';
 import '../../controllers/order_controller.dart';
 import '../../controllers/settings_controller.dart';
 import '../../models/user.dart';
-import '../../services/notification_service.dart';
+import '../../api/local_demo_service.dart';
+import '../../api/notification_service.dart';
 import '../../utils/app_colors.dart';
 import 'loyalty_card.dart';
 
@@ -126,7 +127,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
 
     if (profile == null) {
-      _showMessage('Пользователь не найден. Пожалуйста, войдите снова.');
       setState(() => isLoading = false);
       return;
     }
@@ -251,6 +251,74 @@ class _ProfileScreenState extends State<ProfileScreen> {
       }
       Get.offAllNamed('/main');
     }
+  }
+
+  Future<void> _resetDemoData() async {
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext context) {
+        final bool isDark = Theme.of(context).brightness == Brightness.dark;
+
+        return AlertDialog(
+          backgroundColor: isDark ? AppColors.darkSurface : Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+            side: BorderSide(
+              color: isDark ? AppColors.darkBorder : AppColors.border,
+            ),
+          ),
+          title: const Text('Сбросить демо-данные'),
+          content: const Text(
+            'Это вернёт приложение к начальному состоянию: очистятся корзина, заказы, текущая сессия и восстановятся демо-данные.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: Text(
+                'Отмена',
+                style: TextStyle(
+                  color: isDark ? AppColors.purpleLight : AppColors.primary,
+                ),
+              ),
+            ),
+            DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: isDark
+                    ? AppColors.darkBrandGradient
+                    : AppColors.brandGradient,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: ElevatedButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.transparent,
+                  shadowColor: Colors.transparent,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+                child: const Text('Сбросить'),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed != true) {
+      return;
+    }
+
+    await LocalDemoService.instance.resetDemoData();
+    await authController.logout();
+
+    if (!mounted) {
+      return;
+    }
+
+    _showMessage('Демо-данные успешно сброшены');
+    Get.offAllNamed('/main');
   }
 
   bool _notificationsEnabled() {
@@ -488,7 +556,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               paymentMethods = [
                                 ...paymentMethods,
                                 ProfilePaymentMethod(
-                                  id: DateTime.now().millisecondsSinceEpoch.toString(),
+                                  id: DateTime.now()
+                                      .millisecondsSinceEpoch
+                                      .toString(),
                                   title: title,
                                   details: details,
                                   icon: selectedIcon,
@@ -768,6 +838,58 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     activeThumbColor:
                     isDark ? AppColors.purple : AppColors.primary,
                     onChanged: (bool val) => settingsController.setDarkTheme(val),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            _card(
+              context,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Демо-режим',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Сброс вернёт приложение к начальному состоянию для показа на защите.',
+                    style: TextStyle(
+                      color: isDark
+                          ? AppColors.darkMutedForeground
+                          : AppColors.mutedForeground,
+                      height: 1.45,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  SizedBox(
+                    width: double.infinity,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: isDark
+                            ? AppColors.darkBrandGradient
+                            : AppColors.brandGradient,
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                      child: ElevatedButton.icon(
+                        onPressed: _resetDemoData,
+                        icon: const Icon(Icons.restart_alt_rounded),
+                        label: const Text('Сбросить демо-данные'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.transparent,
+                          shadowColor: Colors.transparent,
+                          foregroundColor: Colors.white,
+                          minimumSize: const Size.fromHeight(54),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(18),
+                          ),
+                        ),
+                      ),
+                    ),
                   ),
                 ],
               ),

@@ -9,7 +9,7 @@ import '../controllers/settings_controller.dart';
 import '../helpers/order_tracking_helper.dart';
 import '../models/cart_item.dart' as model;
 import '../models/order_model.dart';
-import '../services/notification_service.dart';
+import '../api/notification_service.dart';
 
 class OrderController extends GetxController {
   final AuthController authController;

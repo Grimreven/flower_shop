@@ -1,47 +1,24 @@
-// lib/api/order_service.dart
-import 'dart:convert';
-import 'package:http/http.dart' as http;
 import '../models/order_model.dart';
+import '../api/local_demo_service.dart';
 
 class OrderService {
-  final String baseUrl = 'http://127.0.0.1:3000';
   final String token;
+  final LocalDemoService _localDemoService = LocalDemoService.instance;
 
-  OrderService({required this.token});
+  OrderService({
+    required this.token,
+  });
 
-
-  Future<void> createOrder({required List<Map<String, dynamic>> itemsMaps}) async {
-    final response = await http.post(
-      Uri.parse('$baseUrl/orders'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
-      body: jsonEncode({'items': itemsMaps}),
-    );
-
-    if (response.statusCode != 200 && response.statusCode != 201) {
-      throw Exception('Ошибка создания заказа: ${response.statusCode} ${response.body}');
-    }
+  Future<void> createOrder({
+    required List<Map<String, dynamic>> itemsMaps,
+  }) async {
+    await _localDemoService.createOrder(token, itemsMaps);
   }
 
   Future<List<OrderModel>> getUserOrders() async {
-    final response = await http.get(
-      Uri.parse('$baseUrl/orders'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
-    );
+    final List<Map<String, dynamic>> rawOrders =
+    await _localDemoService.getOrdersRaw(token);
 
-    if (response.statusCode != 200) {
-      throw Exception('Ошибка получения заказов: ${response.statusCode} ${response.body}');
-    }
-
-    final data = jsonDecode(response.body) as List<dynamic>? ?? [];
-    return data.map((e) {
-      final m = (e is Map<String, dynamic>) ? e : Map<String, dynamic>.from(e);
-      return OrderModel.fromJson(m);
-    }).toList();
+    return rawOrders.map((e) => OrderModel.fromJson(e)).toList();
   }
 }

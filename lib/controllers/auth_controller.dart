@@ -1,8 +1,9 @@
 import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../api/auth_service.dart';
 import '../models/user.dart';
+import '../api/auth_service.dart';
+import '../api/local_demo_service.dart';
 
 class AuthController extends GetxController {
   final AuthService _authService = AuthService();
@@ -15,9 +16,12 @@ class AuthController extends GetxController {
   @override
   void onInit() {
     super.onInit();
+    LocalDemoService.instance.ensureSeeded();
   }
 
   Future<void> loadToken() async {
+    await LocalDemoService.instance.ensureSeeded();
+
     final SharedPreferences prefs = await SharedPreferences.getInstance();
     token.value = prefs.getString('token') ?? '';
 
