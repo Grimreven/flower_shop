@@ -1,5 +1,4 @@
 import 'package:get/get.dart';
-
 import '../controllers/auth_controller.dart';
 import '../controllers/cart_controller.dart';
 import '../controllers/favorites_controller.dart';
@@ -20,17 +19,17 @@ class AppBindings extends Bindings {
     );
 
     Get.put(
+      FavoritesController(),
+      permanent: true,
+    );
+
+    Get.put(
       CartController(authController: authController),
       permanent: true,
     );
 
     Get.put(
       OrderController(authController: authController),
-      permanent: true,
-    );
-
-    Get.put(
-      FavoritesController(),
       permanent: true,
     );
   }

@@ -10,6 +10,7 @@ class Product {
   final double rating;
   final List<String>? care;
   final List<PriceHistory>? priceHistory;
+  final bool isFavorite;
 
   Product({
     required this.id,
@@ -23,10 +24,12 @@ class Product {
     required this.rating,
     this.care,
     this.priceHistory,
+    this.isFavorite = false,
   });
 
   factory Product.fromJson(Map<String, dynamic> json) {
     List<String>? careList;
+
     if (json['care'] != null) {
       careList = List<String>.from(json['care']);
     }
@@ -42,6 +45,37 @@ class Product {
       inStock: json['in_stock'] ?? true,
       rating: double.tryParse(json['rating'].toString()) ?? 0.0,
       care: careList,
+      isFavorite: json['is_favorite'] ?? false,
+    );
+  }
+
+  Product copyWith({
+    int? id,
+    String? name,
+    String? description,
+    double? price,
+    String? imageUrl,
+    int? categoryId,
+    String? categoryName,
+    bool? inStock,
+    double? rating,
+    List<String>? care,
+    List<PriceHistory>? priceHistory,
+    bool? isFavorite,
+  }) {
+    return Product(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      description: description ?? this.description,
+      price: price ?? this.price,
+      imageUrl: imageUrl ?? this.imageUrl,
+      categoryId: categoryId ?? this.categoryId,
+      categoryName: categoryName ?? this.categoryName,
+      inStock: inStock ?? this.inStock,
+      rating: rating ?? this.rating,
+      care: care ?? this.care,
+      priceHistory: priceHistory ?? this.priceHistory,
+      isFavorite: isFavorite ?? this.isFavorite,
     );
   }
 }
@@ -50,5 +84,8 @@ class PriceHistory {
   final double price;
   final DateTime changedAt;
 
-  PriceHistory({required this.price, required this.changedAt});
+  PriceHistory({
+    required this.price,
+    required this.changedAt,
+  });
 }

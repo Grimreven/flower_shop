@@ -12,32 +12,40 @@ class ProductCard extends StatelessWidget {
   final VoidCallback? onViewDetails;
   final VoidCallback? onAddToCart;
 
+  final AuthController? authController;
+  final CartController? cartController;
+
   const ProductCard({
     super.key,
     required this.product,
     this.onViewDetails,
     this.onAddToCart,
-    required AuthController authController,
-    required cartController,
+    this.authController,
+    this.cartController,
   });
 
   @override
   Widget build(BuildContext context) {
-    final CartController cartController = Get.find<CartController>();
-    final AuthController authController = Get.find<AuthController>();
+    final CartController resolvedCartController =
+        cartController ?? Get.find<CartController>();
+    final AuthController resolvedAuthController =
+        authController ?? Get.find<AuthController>();
     final FavoritesController favoritesController =
     Get.find<FavoritesController>();
 
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
     final Color cardColor = Theme.of(context).cardColor;
     final Color onSurface = Theme.of(context).colorScheme.onSurface;
-    final Color borderColor = isDark ? AppColors.darkBorder : AppColors.border;
+
+    final Color borderColor =
+    isDark ? AppColors.darkBorder : AppColors.border;
     final Color imageBackground =
     isDark ? AppColors.darkSurfaceSoft : const Color(0xFFF8EFF3);
     final Color quantityBackground =
     isDark ? AppColors.darkSurfaceElevated : AppColors.primaryLight;
-    final Color ratingBackground = isDark
-        ? AppColors.darkSurfaceElevated
+    final Color overlayBackground =
+    isDark
+        ? AppColors.darkSurface.withValues(alpha: 0.92)
         : Colors.white.withValues(alpha: 0.94);
 
     return Container(
@@ -91,17 +99,18 @@ class ProductCard extends StatelessWidget {
                       ),
                     ),
                   ),
+
                   if (!product.inStock)
                     Positioned(
-                      top: 10,
                       left: 10,
+                      bottom: 10,
                       child: Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 10,
                           vertical: 6,
                         ),
                         decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.65),
+                          color: Colors.black.withValues(alpha: 0.68),
                           borderRadius: BorderRadius.circular(999),
                         ),
                         child: const Text(
@@ -114,28 +123,39 @@ class ProductCard extends StatelessWidget {
                         ),
                       ),
                     ),
+
                   Positioned(
                     top: 10,
+                    left: 10,
                     right: 10,
-                    child: Column(
+                    child: Row(
                       children: [
-                        Obx(
-                              () => Material(
-                            color: ratingBackground,
-                            borderRadius: BorderRadius.circular(999),
+                        Obx(() {
+                          final bool isFavorite =
+                          favoritesController.isFavorite(product.id);
+
+                          return Material(
+                            color: Colors.transparent,
                             child: InkWell(
                               borderRadius: BorderRadius.circular(999),
-                              onTap: () => favoritesController.toggleFavorite(product),
+                              onTap: () async {
+                                await favoritesController.toggleFavorite(
+                                  product,
+                                );
+                              },
                               child: Container(
-                                padding: const EdgeInsets.all(8),
+                                width: 34,
+                                height: 34,
                                 decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(999),
+                                  color: overlayBackground,
+                                  shape: BoxShape.circle,
                                   border: Border.all(color: borderColor),
                                   boxShadow: isDark
                                       ? [
                                     BoxShadow(
-                                      color: AppColors.purple
-                                          .withValues(alpha: 0.08),
+                                      color: AppColors.purple.withValues(
+                                        alpha: 0.08,
+                                      ),
                                       blurRadius: 10,
                                       offset: const Offset(0, 4),
                                     ),
@@ -143,35 +163,36 @@ class ProductCard extends StatelessWidget {
                                       : null,
                                 ),
                                 child: Icon(
-                                  favoritesController.isFavorite(product.id)
+                                  isFavorite
                                       ? Icons.favorite_rounded
                                       : Icons.favorite_border_rounded,
                                   size: 18,
-                                  color: favoritesController.isFavorite(product.id)
-                                      ? AppColors.primary
+                                  color: isFavorite
+                                      ? AppColors.danger
                                       : (isDark
-                                      ? AppColors.purpleLight
-                                      : AppColors.mutedForeground),
+                                      ? AppColors.darkForeground
+                                      : AppColors.foreground),
                                 ),
                               ),
                             ),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
+                          );
+                        }),
+                        const Spacer(),
                         Container(
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 5,
+                            horizontal: 10,
+                            vertical: 6,
                           ),
                           decoration: BoxDecoration(
-                            color: ratingBackground,
+                            color: overlayBackground,
                             borderRadius: BorderRadius.circular(999),
                             border: Border.all(color: borderColor),
                             boxShadow: isDark
                                 ? [
                               BoxShadow(
-                                color:
-                                AppColors.purple.withValues(alpha: 0.08),
+                                color: AppColors.purple.withValues(
+                                  alpha: 0.08,
+                                ),
                                 blurRadius: 10,
                                 offset: const Offset(0, 4),
                               ),
@@ -179,6 +200,7 @@ class ProductCard extends StatelessWidget {
                                 : null,
                           ),
                           child: Row(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
                               Icon(
                                 Icons.star_rounded,
@@ -218,6 +240,7 @@ class ProductCard extends StatelessWidget {
                       fontWeight: FontWeight.w700,
                       fontSize: 15,
                       color: onSurface,
+                      height: 1.2,
                     ),
                   ),
                   const SizedBox(height: 6),
@@ -234,8 +257,10 @@ class ProductCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   ShaderMask(
-                    shaderCallback: (bounds) =>
-                        (isDark ? AppColors.darkBrandGradient : AppColors.brandGradient)
+                    shaderCallback: (Rect bounds) =>
+                        (isDark
+                            ? AppColors.darkBrandGradient
+                            : AppColors.brandGradient)
                             .createShader(bounds),
                     child: Text(
                       '${product.price.toStringAsFixed(0)} ₽',
@@ -248,7 +273,7 @@ class ProductCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 10),
                   Obx(() {
-                    if (!authController.isLoggedIn) {
+                    if (!resolvedAuthController.isLoggedIn) {
                       return SizedBox(
                         width: double.infinity,
                         height: 42,
@@ -291,8 +316,10 @@ class ProductCard extends StatelessWidget {
                       );
                     }
 
-                    final bool inCart = cartController.isInCart(product);
-                    final int qty = cartController.getQuantity(product);
+                    final bool inCart =
+                    resolvedCartController.isInCart(product);
+                    final int qty =
+                    resolvedCartController.getQuantity(product);
 
                     if (!inCart) {
                       return SizedBox(
@@ -319,7 +346,9 @@ class ProductCard extends StatelessWidget {
                             onPressed: product.inStock
                                 ? (onAddToCart ??
                                     () async {
-                                  await cartController.addToCart(product);
+                                  await resolvedCartController.addToCart(
+                                    product,
+                                  );
                                   Get.snackbar(
                                     'Добавлено',
                                     '${product.name} добавлен в корзину',
@@ -365,7 +394,8 @@ class ProductCard extends StatelessWidget {
                                   ? AppColors.purpleLight
                                   : AppColors.primary,
                             ),
-                            onPressed: () => cartController.decrement(product),
+                            onPressed: () =>
+                                resolvedCartController.decrement(product),
                           ),
                           Text(
                             qty.toString(),
@@ -383,7 +413,8 @@ class ProductCard extends StatelessWidget {
                                   ? AppColors.purpleLight
                                   : AppColors.primary,
                             ),
-                            onPressed: () => cartController.increment(product),
+                            onPressed: () =>
+                                resolvedCartController.increment(product),
                           ),
                         ],
                       ),
