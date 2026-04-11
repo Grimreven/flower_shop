@@ -1,56 +1,37 @@
-import 'dart:convert';
-import 'package:http/http.dart' as http;
 import '../controllers/auth_controller.dart';
 import '../models/product.dart';
+import 'local_demo_service.dart';
 
 class CartService {
   final AuthController authController;
-  final String baseUrl = 'http://127.0.0.1:3000';
+  final LocalDemoService _localDemoService = LocalDemoService.instance;
 
   CartService({required this.authController});
 
-  Map<String, String> get _headers => {
-    'Content-Type': 'application/json',
-    'Authorization': 'Bearer ${authController.token.value}',
-  };
+  String get _token => authController.token.value;
 
   Future<List<CartItemModel>> fetchCart() async {
-    final response = await http.get(Uri.parse('$baseUrl/cart'), headers: _headers);
-    if (response.statusCode != 200) {
-      throw Exception('Ошибка загрузки корзины: ${response.statusCode} ${response.body}');
-    }
-    final data = jsonDecode(response.body) as List;
-    return data.map((e) => CartItemModel.fromJson(e as Map<String, dynamic>)).toList();
+    final List<Map<String, dynamic>> data = await _localDemoService.getCart(_token);
+
+    return data
+        .map((e) => CartItemModel.fromJson(e))
+        .toList();
   }
 
   Future<void> addToCart(int productId, int quantity) async {
-    final response = await http.post(Uri.parse('$baseUrl/cart'),
-        headers: _headers, body: jsonEncode({'product_id': productId, 'quantity': quantity}));
-    if (response.statusCode != 200 && response.statusCode != 201) {
-      throw Exception('Ошибка добавления: ${response.statusCode} ${response.body}');
-    }
+    await _localDemoService.addToCart(_token, productId, quantity);
   }
 
   Future<void> updateQuantity(int productId, int quantity) async {
-    final response = await http.put(Uri.parse('$baseUrl/cart/$productId'),
-        headers: _headers, body: jsonEncode({'quantity': quantity}));
-    if (response.statusCode != 200) {
-      throw Exception('Ошибка обновления: ${response.statusCode} ${response.body}');
-    }
+    await _localDemoService.updateCart(_token, productId, quantity);
   }
 
   Future<void> removeItem(int productId) async {
-    final response = await http.delete(Uri.parse('$baseUrl/cart/$productId'), headers: _headers);
-    if (response.statusCode != 200) {
-      throw Exception('Ошибка удаления: ${response.statusCode} ${response.body}');
-    }
+    await _localDemoService.removeFromCart(_token, productId);
   }
 
   Future<void> clearCart() async {
-    final response = await http.delete(Uri.parse('$baseUrl/cart'), headers: _headers);
-    if (response.statusCode != 200) {
-      throw Exception('Ошибка очистки корзины: ${response.statusCode} ${response.body}');
-    }
+    await _localDemoService.clearCart(_token);
   }
 }
 
@@ -59,10 +40,13 @@ class CartItemModel {
   final Product product;
   final int quantity;
 
-  CartItemModel({required this.id, required this.product, required this.quantity});
+  CartItemModel({
+    required this.id,
+    required this.product,
+    required this.quantity,
+  });
 
   factory CartItemModel.fromJson(Map<String, dynamic> json) {
-    // robust parsing for numbers that sometimes come as strings
     double parseDouble(dynamic v) {
       if (v == null) return 0.0;
       if (v is num) return v.toDouble();
@@ -82,14 +66,16 @@ class CartItemModel {
     }
 
     final product = Product(
-      id: json['product_id'] ?? json['id'] ?? 0,
-      name: json['name'] ?? '',
-      description: json['description'] ?? '',
+      id: parseInt(json['product_id'] ?? json['id']),
+      name: json['name']?.toString() ?? '',
+      description: json['description']?.toString() ?? '',
       price: parseDouble(json['price']),
-      imageUrl: json['image_url'] ?? '',
-      categoryId: json['category_id'] ?? 0,
-      categoryName: json['category_name'] ?? '',
-      inStock: json['in_stock'] == null ? true : (json['in_stock'] == true || json['in_stock'] == 1),
+      imageUrl: json['image_url']?.toString() ?? '',
+      categoryId: parseInt(json['category_id']),
+      categoryName: json['category_name']?.toString() ?? '',
+      inStock: json['in_stock'] == null
+          ? true
+          : (json['in_stock'] == true || json['in_stock'] == 1),
       rating: parseDouble(json['rating']),
       care: (json['care'] is List) ? List<String>.from(json['care']) : null,
     );

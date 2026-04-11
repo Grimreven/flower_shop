@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 
 import '../controllers/auth_controller.dart';
 import '../controllers/cart_controller.dart';
+import '../controllers/favorites_controller.dart';
 import '../models/product.dart';
 import '../utils/app_colors.dart';
 
@@ -25,7 +26,7 @@ class ProductDetail extends StatelessWidget {
     if (!isLoggedIn) {
       final bool isDark = Theme.of(context).brightness == Brightness.dark;
 
-      await showDialog<void>(
+      await showDialog(
         context: context,
         builder: (BuildContext context) {
           return AlertDialog(
@@ -54,12 +55,10 @@ class ProductDetail extends StatelessWidget {
           );
         },
       );
-
       return;
     }
 
     await cartController.addToCart(product);
-
     Get.snackbar(
       'Добавлено',
       '${product.name} добавлен в корзину',
@@ -93,6 +92,9 @@ class ProductDetail extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final FavoritesController favoritesController =
+    Get.find<FavoritesController>();
+
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
     final Color bg = Theme.of(context).scaffoldBackgroundColor;
     final Color surface = Theme.of(context).cardColor;
@@ -109,6 +111,22 @@ class ProductDetail extends StatelessWidget {
             pinned: true,
             backgroundColor: bg,
             foregroundColor: onSurface,
+            actions: [
+              Obx(
+                    () => IconButton(
+                  tooltip: 'Избранное',
+                  onPressed: () => favoritesController.toggleFavorite(product),
+                  icon: Icon(
+                    favoritesController.isFavorite(product.id)
+                        ? Icons.favorite_rounded
+                        : Icons.favorite_border_rounded,
+                    color: favoritesController.isFavorite(product.id)
+                        ? AppColors.primary
+                        : onSurface,
+                  ),
+                ),
+              ),
+            ],
             flexibleSpace: FlexibleSpaceBar(
               background: Stack(
                 fit: StackFit.expand,
@@ -123,9 +141,8 @@ class ProductDetail extends StatelessWidget {
                       child: Icon(
                         Icons.local_florist_rounded,
                         size: 72,
-                        color: isDark
-                            ? AppColors.purpleLight
-                            : AppColors.primary,
+                        color:
+                        isDark ? AppColors.purpleLight : AppColors.primary,
                       ),
                     ),
                   ),
@@ -205,10 +222,11 @@ class ProductDetail extends StatelessWidget {
                         ),
                         const Spacer(),
                         ShaderMask(
-                          shaderCallback: (Rect bounds) => (isDark
-                              ? AppColors.darkBrandGradient
-                              : AppColors.brandGradient)
-                              .createShader(bounds),
+                          shaderCallback: (Rect bounds) =>
+                              (isDark
+                                  ? AppColors.darkBrandGradient
+                                  : AppColors.brandGradient)
+                                  .createShader(bounds),
                           child: Text(
                             '${product.price.toStringAsFixed(0)} ₽',
                             style: const TextStyle(
@@ -299,7 +317,41 @@ class ProductDetail extends StatelessWidget {
                         ],
                       ),
                     ),
-                    const SizedBox(height: 26),
+                    const SizedBox(height: 18),
+                    Obx(
+                          () => SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: () =>
+                              favoritesController.toggleFavorite(product),
+                          icon: Icon(
+                            favoritesController.isFavorite(product.id)
+                                ? Icons.favorite_rounded
+                                : Icons.favorite_border_rounded,
+                          ),
+                          label: Text(
+                            favoritesController.isFavorite(product.id)
+                                ? 'Убрать из избранного'
+                                : 'Добавить в избранное',
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            minimumSize: const Size.fromHeight(54),
+                            foregroundColor: isDark
+                                ? AppColors.purpleLight
+                                : AppColors.primary,
+                            side: BorderSide(
+                              color: isDark
+                                  ? AppColors.darkBorder
+                                  : AppColors.border,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(18),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
                     DecoratedBox(
                       decoration: BoxDecoration(
                         gradient: isDark
@@ -308,7 +360,9 @@ class ProductDetail extends StatelessWidget {
                         borderRadius: BorderRadius.circular(18),
                         boxShadow: [
                           BoxShadow(
-                            color: (isDark ? AppColors.purple : AppColors.primary)
+                            color: (isDark
+                                ? AppColors.purple
+                                : AppColors.primary)
                                 .withValues(alpha: 0.18),
                             blurRadius: 16,
                             offset: const Offset(0, 8),

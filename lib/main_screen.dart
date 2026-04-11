@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+
 import 'controllers/auth_controller.dart';
-import 'screens/home/home_screen.dart';
+import 'screens/auth/auth_screen.dart';
 import 'screens/cart/cart_screen.dart';
+import 'screens/favorites/favorites_screen.dart';
+import 'screens/home/home_screen.dart';
 import 'screens/order/orders_screen.dart';
 import 'screens/profile/profile_screen.dart';
-import 'screens/auth/auth_screen.dart';
 import 'utils/app_colors.dart';
 
 class MainScreen extends StatefulWidget {
@@ -18,7 +20,6 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> {
   late int _currentIndex;
   final AuthController authController = Get.find<AuthController>();
-
   late final List<Widget> _pages;
 
   @override
@@ -27,6 +28,7 @@ class _MainScreenState extends State<MainScreen> {
 
     _pages = [
       const HomeScreen(),
+      FavoritesScreen(),
       const CartScreen(),
       const OrdersScreen(),
       const ProfileScreen(),
@@ -38,7 +40,7 @@ class _MainScreenState extends State<MainScreen> {
   }
 
   Future<void> _onTabTapped(int index) async {
-    final restrictedTabs = [1, 2, 3];
+    final restrictedTabs = [1, 2, 3, 4];
 
     if (restrictedTabs.contains(index) && authController.token.isEmpty) {
       _showAuthDialog();
@@ -73,9 +75,9 @@ class _MainScreenState extends State<MainScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final surface = Theme.of(context).colorScheme.surface;
-    final borderColor = isDark ? AppColors.darkBorder : AppColors.border;
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color surface = Theme.of(context).colorScheme.surface;
+    final Color borderColor = isDark ? AppColors.darkBorder : AppColors.border;
 
     return Scaffold(
       body: AnimatedSwitcher(
@@ -102,9 +104,8 @@ class _MainScreenState extends State<MainScreen> {
           currentIndex: _currentIndex,
           onTap: _onTabTapped,
           selectedItemColor: isDark ? AppColors.purple : AppColors.primary,
-          unselectedItemColor: isDark
-              ? AppColors.darkMutedForeground
-              : AppColors.mutedForeground,
+          unselectedItemColor:
+          isDark ? AppColors.darkMutedForeground : AppColors.mutedForeground,
           type: BottomNavigationBarType.fixed,
           backgroundColor: surface,
           elevation: 0,
@@ -113,6 +114,11 @@ class _MainScreenState extends State<MainScreen> {
             BottomNavigationBarItem(
               icon: Icon(Icons.home_rounded),
               label: 'Главная',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.favorite_border_rounded),
+              activeIcon: Icon(Icons.favorite_rounded),
+              label: 'Избранное',
             ),
             BottomNavigationBarItem(
               icon: Icon(Icons.shopping_cart_rounded),

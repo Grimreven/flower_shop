@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import '../models/product.dart';
-import '../controllers/cart_controller.dart';
+
 import '../controllers/auth_controller.dart';
+import '../controllers/cart_controller.dart';
+import '../controllers/favorites_controller.dart';
+import '../models/product.dart';
 import '../utils/app_colors.dart';
 
 class ProductCard extends StatelessWidget {
@@ -21,23 +23,22 @@ class ProductCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cartController = Get.find<CartController>();
-    final authController = Get.find<AuthController>();
+    final CartController cartController = Get.find<CartController>();
+    final AuthController authController = Get.find<AuthController>();
+    final FavoritesController favoritesController =
+    Get.find<FavoritesController>();
 
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final cardColor = Theme.of(context).cardColor;
-    final onSurface = Theme.of(context).colorScheme.onSurface;
-    final borderColor =
-    isDark ? AppColors.darkBorder : AppColors.border;
-
-    final imageBackground =
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color cardColor = Theme.of(context).cardColor;
+    final Color onSurface = Theme.of(context).colorScheme.onSurface;
+    final Color borderColor = isDark ? AppColors.darkBorder : AppColors.border;
+    final Color imageBackground =
     isDark ? AppColors.darkSurfaceSoft : const Color(0xFFF8EFF3);
-
-    final quantityBackground =
+    final Color quantityBackground =
     isDark ? AppColors.darkSurfaceElevated : AppColors.primaryLight;
-
-    final ratingBackground =
-    isDark ? AppColors.darkSurfaceElevated : Colors.white.withValues(alpha: 0.94);
+    final Color ratingBackground = isDark
+        ? AppColors.darkSurfaceElevated
+        : Colors.white.withValues(alpha: 0.94);
 
     return Container(
       decoration: BoxDecoration(
@@ -80,7 +81,9 @@ class ProductCard extends StatelessWidget {
                               child: Icon(
                                 Icons.image_not_supported_outlined,
                                 size: 48,
-                                color: isDark ? AppColors.purple : AppColors.primary,
+                                color: isDark
+                                    ? AppColors.purple
+                                    : AppColors.primary,
                               ),
                             ),
                           ),
@@ -114,43 +117,89 @@ class ProductCard extends StatelessWidget {
                   Positioned(
                     top: 10,
                     right: 10,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 5,
-                      ),
-                      decoration: BoxDecoration(
-                        color: ratingBackground,
-                        borderRadius: BorderRadius.circular(999),
-                        border: Border.all(color: borderColor),
-                        boxShadow: isDark
-                            ? [
-                          BoxShadow(
-                            color: AppColors.purple.withValues(alpha: 0.08),
-                            blurRadius: 10,
-                            offset: const Offset(0, 4),
-                          ),
-                        ]
-                            : null,
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.star_rounded,
-                            size: 14,
-                            color: isDark ? AppColors.purpleLight : Colors.amber,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            product.rating.toStringAsFixed(1),
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
-                              color: onSurface,
+                    child: Column(
+                      children: [
+                        Obx(
+                              () => Material(
+                            color: ratingBackground,
+                            borderRadius: BorderRadius.circular(999),
+                            child: InkWell(
+                              borderRadius: BorderRadius.circular(999),
+                              onTap: () => favoritesController.toggleFavorite(product),
+                              child: Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(999),
+                                  border: Border.all(color: borderColor),
+                                  boxShadow: isDark
+                                      ? [
+                                    BoxShadow(
+                                      color: AppColors.purple
+                                          .withValues(alpha: 0.08),
+                                      blurRadius: 10,
+                                      offset: const Offset(0, 4),
+                                    ),
+                                  ]
+                                      : null,
+                                ),
+                                child: Icon(
+                                  favoritesController.isFavorite(product.id)
+                                      ? Icons.favorite_rounded
+                                      : Icons.favorite_border_rounded,
+                                  size: 18,
+                                  color: favoritesController.isFavorite(product.id)
+                                      ? AppColors.primary
+                                      : (isDark
+                                      ? AppColors.purpleLight
+                                      : AppColors.mutedForeground),
+                                ),
+                              ),
                             ),
                           ),
-                        ],
-                      ),
+                        ),
+                        const SizedBox(height: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: ratingBackground,
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(color: borderColor),
+                            boxShadow: isDark
+                                ? [
+                              BoxShadow(
+                                color:
+                                AppColors.purple.withValues(alpha: 0.08),
+                                blurRadius: 10,
+                                offset: const Offset(0, 4),
+                              ),
+                            ]
+                                : null,
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.star_rounded,
+                                size: 14,
+                                color: isDark
+                                    ? AppColors.purpleLight
+                                    : Colors.amber,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                product.rating.toStringAsFixed(1),
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: onSurface,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
@@ -185,10 +234,9 @@ class ProductCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   ShaderMask(
-                    shaderCallback: (bounds) => (isDark
-                        ? AppColors.darkBrandGradient
-                        : AppColors.brandGradient)
-                        .createShader(bounds),
+                    shaderCallback: (bounds) =>
+                        (isDark ? AppColors.darkBrandGradient : AppColors.brandGradient)
+                            .createShader(bounds),
                     child: Text(
                       '${product.price.toStringAsFixed(0)} ₽',
                       style: const TextStyle(
@@ -212,7 +260,9 @@ class ProductCard extends StatelessWidget {
                             borderRadius: BorderRadius.circular(16),
                             boxShadow: [
                               BoxShadow(
-                                color: (isDark ? AppColors.purple : AppColors.primary)
+                                color: (isDark
+                                    ? AppColors.purple
+                                    : AppColors.primary)
                                     .withValues(alpha: 0.18),
                                 blurRadius: 14,
                                 offset: const Offset(0, 6),
@@ -241,8 +291,8 @@ class ProductCard extends StatelessWidget {
                       );
                     }
 
-                    final inCart = cartController.isInCart(product);
-                    final qty = cartController.getQuantity(product);
+                    final bool inCart = cartController.isInCart(product);
+                    final int qty = cartController.getQuantity(product);
 
                     if (!inCart) {
                       return SizedBox(
@@ -256,7 +306,9 @@ class ProductCard extends StatelessWidget {
                             borderRadius: BorderRadius.circular(16),
                             boxShadow: [
                               BoxShadow(
-                                color: (isDark ? AppColors.purple : AppColors.primary)
+                                color: (isDark
+                                    ? AppColors.purple
+                                    : AppColors.primary)
                                     .withValues(alpha: 0.18),
                                 blurRadius: 14,
                                 offset: const Offset(0, 6),
@@ -309,8 +361,9 @@ class ProductCard extends StatelessWidget {
                             splashRadius: 20,
                             icon: Icon(
                               Icons.remove_circle_outline,
-                              color:
-                              isDark ? AppColors.purpleLight : AppColors.primary,
+                              color: isDark
+                                  ? AppColors.purpleLight
+                                  : AppColors.primary,
                             ),
                             onPressed: () => cartController.decrement(product),
                           ),
@@ -326,8 +379,9 @@ class ProductCard extends StatelessWidget {
                             splashRadius: 20,
                             icon: Icon(
                               Icons.add_circle_outline,
-                              color:
-                              isDark ? AppColors.purpleLight : AppColors.primary,
+                              color: isDark
+                                  ? AppColors.purpleLight
+                                  : AppColors.primary,
                             ),
                             onPressed: () => cartController.increment(product),
                           ),
