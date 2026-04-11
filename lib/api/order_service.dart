@@ -1,5 +1,5 @@
-import '../models/order_model.dart';
 import '../api/local_demo_service.dart';
+import '../models/order_model.dart';
 
 class OrderService {
   final String token;
@@ -9,10 +9,15 @@ class OrderService {
     required this.token,
   });
 
-  Future<void> createOrder({
+  Future<Map<String, dynamic>> createOrder({
     required List<Map<String, dynamic>> itemsMaps,
+    required Map<String, dynamic> checkoutData,
   }) async {
-    await _localDemoService.createOrder(token, itemsMaps);
+    return _localDemoService.createOrder(
+      token,
+      itemsMaps,
+      checkoutData,
+    );
   }
 
   Future<List<OrderModel>> getUserOrders() async {

@@ -2,14 +2,15 @@ import 'dart:async';
 
 import 'package:get/get.dart';
 
+import '../api/notification_service.dart';
 import '../api/order_service.dart';
 import '../controllers/auth_controller.dart';
 import '../controllers/cart_controller.dart' as ctrl;
 import '../controllers/settings_controller.dart';
 import '../helpers/order_tracking_helper.dart';
 import '../models/cart_item.dart' as model;
+import '../models/checkout_summary.dart';
 import '../models/order_model.dart';
-import '../api/notification_service.dart';
 
 class OrderController extends GetxController {
   final AuthController authController;
@@ -43,7 +44,11 @@ class OrderController extends GetxController {
 
   Future<void> createOrder(
       List<model.CartItem> items, {
-        int bonusToUse = 0,
+        required CheckoutSummary summary,
+        required String paymentMethod,
+        required String deliveryAddress,
+        required String recipientComment,
+        String promoCode = '',
       }) async {
     if (authController.token.isEmpty) {
       throw Exception('Нет токена! Пользователь не авторизован.');
@@ -53,11 +58,21 @@ class OrderController extends GetxController {
       final List<Map<String, dynamic>> itemsMaps =
       items.map((e) => e.toJson()).toList();
 
-      await _orderService.createOrder(itemsMaps: itemsMaps);
+      await _orderService.createOrder(
+        itemsMaps: itemsMaps,
+        checkoutData: {
+          ...summary.toJson(),
+          'payment_method': paymentMethod,
+          'delivery_address': deliveryAddress,
+          'recipient_comment': recipientComment,
+          'promo_code': promoCode,
+        },
+      );
 
       final ctrl.CartController cartController = Get.find<ctrl.CartController>();
-      await cartController.clear();
+      await cartController.clearLocalOnly();
 
+      await authController.getProfile();
       await fetchUserOrders();
 
       if (orders.isNotEmpty) {
@@ -85,15 +100,6 @@ class OrderController extends GetxController {
     } catch (e) {
       Get.snackbar('Ошибка', 'Не удалось загрузить заказы: $e');
     }
-  }
-
-  double calculateTotal(
-      List<model.CartItem> items, {
-        int bonusToUse = 0,
-      }) {
-    final double total = items.fold<double>(0.0, (sum, it) => sum + it.total);
-    final double result = total - bonusToUse;
-    return result < 0 ? 0.0 : result;
   }
 
   OrderModel? findOrderById(int orderId) {
@@ -218,22 +224,33 @@ class OrderController extends GetxController {
   }
 
   String getTrackingStatusTitle(int orderId) {
-    return OrderTrackingHelper.titleByIndex(getTrackingStepIndex(orderId));
+    final int index = getTrackingStepIndex(orderId);
+    return OrderTrackingHelper.titleByIndex(index);
   }
 
   String getTrackingStatusMessage(int orderId) {
-    return OrderTrackingHelper.messageByIndex(getTrackingStepIndex(orderId));
+    final int index = getTrackingStepIndex(orderId);
+    return OrderTrackingHelper.messageByIndex(index);
+  }
+
+  DateTime? getTrackingEta(int orderId) {
+    return trackingEtaByOrderId[orderId];
   }
 
   String getTrackingEtaText(int orderId) {
-    final DateTime eta = trackingEtaByOrderId[orderId] ??
-        DateTime.now().add(const Duration(minutes: 45));
-    return OrderTrackingHelper.estimatedTimeText(eta);
+    final DateTime? eta = getTrackingEta(orderId);
+    if (eta == null) {
+      return '--:--';
+    }
+
+    final String hour = eta.hour.toString().padLeft(2, '0');
+    final String minute = eta.minute.toString().padLeft(2, '0');
+    return '$hour:$minute';
   }
 
   bool isOrderDelivered(int orderId) {
-    return getTrackingStepIndex(orderId) ==
-        OrderTrackingHelper.steps.length - 1;
+    final int index = getTrackingStepIndex(orderId);
+    return index >= OrderTrackingHelper.steps.length - 1;
   }
 
   @override

@@ -17,8 +17,6 @@ dependencies:
 
   cupertino_icons: ^1.0.8
 
-
-
   shared_preferences: ^2.3.3
 
   lottie: ^3.1.2
@@ -26,7 +24,7 @@ dependencies:
   flutter_form_builder: ^9.3.0
 
   get: ^4.6.6
-
+  get_storage: ^2.1.1
 
 dev_dependencies:
   flutter_test:

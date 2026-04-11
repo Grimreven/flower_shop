@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:get_storage/get_storage.dart';
 
+import 'api/notification_service.dart';
 import 'bindings/app_bindings.dart';
 import 'controllers/auth_controller.dart';
 import 'controllers/settings_controller.dart';
@@ -8,11 +10,11 @@ import 'main_screen.dart';
 import 'screens/order/order_success_screen.dart';
 import 'screens/order/orders_screen.dart';
 import 'utils/app_colors.dart';
-import 'api/notification_service.dart';
 
-void main() async {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  await GetStorage.init();
   AppBindings().dependencies();
 
   final SettingsController settingsController = Get.find<SettingsController>();

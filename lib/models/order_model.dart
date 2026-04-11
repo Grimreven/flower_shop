@@ -1,9 +1,14 @@
-// lib/models/order_model.dart
 import 'order_item.dart';
 
 class OrderModel {
   final int id;
   final double total;
+  final double itemsTotal;
+  final double deliveryCost;
+  final int bonusApplied;
+  final int bonusEarned;
+  final String paymentMethod;
+  final String deliveryAddress;
   final String status;
   final List<OrderItem> items;
   final String createdAt;
@@ -11,15 +16,24 @@ class OrderModel {
   OrderModel({
     required this.id,
     required this.total,
+    required this.itemsTotal,
+    required this.deliveryCost,
+    required this.bonusApplied,
+    required this.bonusEarned,
+    required this.paymentMethod,
+    required this.deliveryAddress,
     required this.status,
     required this.items,
     required this.createdAt,
   });
 
   factory OrderModel.fromJson(Map<String, dynamic> json) {
-    final itemsJson = (json['items'] as List<dynamic>?) ?? [];
-    final itemsList = itemsJson.map((e) {
-      if (e is Map<String, dynamic>) return OrderItem.fromJson(e);
+    final List<dynamic> itemsJson = (json['items'] as List<dynamic>?) ?? [];
+
+    final List<OrderItem> itemsList = itemsJson.map((dynamic e) {
+      if (e is Map<String, dynamic>) {
+        return OrderItem.fromJson(e);
+      }
       return OrderItem.fromJson(Map<String, dynamic>.from(e));
     }).toList();
 
@@ -29,10 +43,23 @@ class OrderModel {
       return double.tryParse(v.toString()) ?? 0.0;
     }
 
+    int parseInt(dynamic v) {
+      if (v == null) return 0;
+      if (v is int) return v;
+      if (v is num) return v.toInt();
+      return int.tryParse(v.toString()) ?? 0;
+    }
+
     return OrderModel(
-      id: (json['id'] is int) ? json['id'] : int.tryParse(json['id']?.toString() ?? '0') ?? 0,
+      id: parseInt(json['id']),
       total: parseDouble(json['total']),
-      status: json['status'] ?? '',
+      itemsTotal: parseDouble(json['items_total'] ?? json['subtotal']),
+      deliveryCost: parseDouble(json['delivery_cost']),
+      bonusApplied: parseInt(json['bonus_applied']),
+      bonusEarned: parseInt(json['bonus_earned']),
+      paymentMethod: json['payment_method']?.toString() ?? '',
+      deliveryAddress: json['delivery_address']?.toString() ?? '',
+      status: json['status']?.toString() ?? '',
       items: itemsList,
       createdAt: json['created_at']?.toString() ?? '',
     );

@@ -148,38 +148,56 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildHeader() {
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color onSurface = Theme.of(context).colorScheme.onSurface;
+    final Color muted = isDark
+        ? AppColors.darkMutedForeground
+        : AppColors.mutedForeground;
+    final Color border = isDark ? AppColors.darkBorder : AppColors.border;
+
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 12, 16, 8),
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
+        gradient: isDark
+            ? AppColors.darkCardGradient
+            : const LinearGradient(
           colors: [Color(0xFFFFEEF2), Color(0xFFFFF8FA)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: border),
+        boxShadow: [
+          BoxShadow(
+            color: isDark
+                ? AppColors.purple.withValues(alpha: 0.08)
+                : AppColors.shadow,
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
       ),
       child: Row(
         children: [
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: const [
+              children: [
                 Text(
                   'Подберите идеальный букет',
                   style: TextStyle(
                     fontSize: 22,
                     fontWeight: FontWeight.w700,
-                    color: AppColors.foreground,
+                    color: onSurface,
                   ),
                 ),
-                SizedBox(height: 8),
+                const SizedBox(height: 8),
                 Text(
                   'Свежие цветы, стильные композиции и быстрая доставка',
                   style: TextStyle(
                     fontSize: 14,
-                    color: AppColors.mutedForeground,
+                    color: muted,
                   ),
                 ),
               ],
@@ -189,12 +207,15 @@ class _HomeScreenState extends State<HomeScreen> {
             width: 62,
             height: 62,
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: isDark ? AppColors.darkSurfaceElevated : Colors.white,
               borderRadius: BorderRadius.circular(18),
+              border: Border.all(
+                color: isDark ? AppColors.darkBorder : Colors.transparent,
+              ),
             ),
-            child: const Icon(
+            child: Icon(
               Icons.local_florist_rounded,
-              color: AppColors.primary,
+              color: isDark ? AppColors.purpleLight : AppColors.primary,
               size: 32,
             ),
           ),
@@ -218,6 +239,14 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildFilters() {
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color cardColor = Theme.of(context).cardColor;
+    final Color onSurface = Theme.of(context).colorScheme.onSurface;
+    final Color muted = isDark
+        ? AppColors.darkMutedForeground
+        : AppColors.mutedForeground;
+    final Color border = isDark ? AppColors.darkBorder : AppColors.border;
+
     final List<String> categories =
     allProducts.map((Product p) => p.categoryName).toSet().toList();
 
@@ -225,26 +254,29 @@ class _HomeScreenState extends State<HomeScreen> {
       margin: const EdgeInsets.symmetric(horizontal: 16),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        gradient: isDark ? AppColors.darkCardGradient : null,
+        color: isDark ? null : cardColor,
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: AppColors.border),
-        boxShadow: const [
+        border: Border.all(color: border),
+        boxShadow: [
           BoxShadow(
-            color: AppColors.shadow,
+            color: isDark
+                ? AppColors.purple.withValues(alpha: 0.08)
+                : AppColors.shadow,
             blurRadius: 16,
-            offset: Offset(0, 6),
+            offset: const Offset(0, 6),
           ),
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'Фильтры',
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w700,
-              color: AppColors.foreground,
+              color: onSurface,
             ),
           ),
           const SizedBox(height: 12),
@@ -254,19 +286,37 @@ class _HomeScreenState extends State<HomeScreen> {
             children: [
               ...categories.map(
                     (String c) => FilterChip(
-                  label: Text(c),
+                  label: Text(
+                    c,
+                    style: TextStyle(
+                      color: selectedCategories.contains(c)
+                          ? Colors.white
+                          : onSurface,
+                    ),
+                  ),
                   selected: selectedCategories.contains(c),
-                  selectedColor: AppColors.primaryLight,
-                  side: const BorderSide(color: AppColors.border),
-                  checkmarkColor: AppColors.primary,
+                  selectedColor:
+                  isDark ? AppColors.purple : AppColors.primary,
+                  backgroundColor:
+                  isDark ? AppColors.darkSurfaceElevated : Colors.white,
+                  side: BorderSide(color: border),
+                  checkmarkColor: Colors.white,
                   onSelected: (_) => _toggleCategory(c),
                 ),
               ),
               FilterChip(
-                label: const Text('В наличии'),
+                label: Text(
+                  'В наличии',
+                  style: TextStyle(
+                    color: inStockOnly ? Colors.white : onSurface,
+                  ),
+                ),
                 selected: inStockOnly,
-                selectedColor: AppColors.primaryLight,
-                side: const BorderSide(color: AppColors.border),
+                selectedColor: isDark ? AppColors.purple : AppColors.primary,
+                backgroundColor:
+                isDark ? AppColors.darkSurfaceElevated : Colors.white,
+                side: BorderSide(color: border),
+                checkmarkColor: Colors.white,
                 onSelected: (_) {
                   setState(() {
                     inStockOnly = !inStockOnly;
@@ -276,16 +326,22 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               TextButton(
                 onPressed: _clearFilters,
-                child: const Text('Очистить'),
+                child: Text(
+                  'Очистить',
+                  style: TextStyle(
+                    color: isDark ? AppColors.purpleLight : AppColors.primary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ),
             ],
           ),
           const SizedBox(height: 12),
-          const Text(
+          Text(
             'Цена',
             style: TextStyle(
               fontWeight: FontWeight.w600,
-              color: AppColors.foreground,
+              color: onSurface,
             ),
           ),
           RangeSlider(
@@ -293,8 +349,9 @@ class _HomeScreenState extends State<HomeScreen> {
             max: 10000,
             divisions: 100,
             values: priceRange,
-            activeColor: AppColors.primary,
-            inactiveColor: AppColors.primaryLight,
+            activeColor: isDark ? AppColors.purple : AppColors.primary,
+            inactiveColor:
+            isDark ? AppColors.darkBorderSoft : AppColors.primaryLight,
             labels: RangeLabels(
               '${priceRange.start.toStringAsFixed(0)} ₽',
               '${priceRange.end.toStringAsFixed(0)} ₽',
@@ -304,12 +361,33 @@ class _HomeScreenState extends State<HomeScreen> {
               _applyFilters();
             },
           ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                '${priceRange.start.toStringAsFixed(0)} ₽',
+                style: TextStyle(
+                  color: muted,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              Text(
+                '${priceRange.end.toStringAsFixed(0)} ₽',
+                style: TextStyle(
+                  color: muted,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );
   }
 
   Widget _sectionTitle(String title) {
+    final Color onSurface = Theme.of(context).colorScheme.onSurface;
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 22, 16, 12),
       child: Row(
@@ -317,10 +395,10 @@ class _HomeScreenState extends State<HomeScreen> {
           Expanded(
             child: Text(
               title,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 22,
                 fontWeight: FontWeight.w700,
-                color: AppColors.foreground,
+                color: onSurface,
               ),
             ),
           ),
@@ -388,25 +466,66 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildSearchBar() {
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color border = isDark ? AppColors.darkBorder : AppColors.border;
+    final Color fillColor =
+    isDark ? AppColors.darkSurfaceElevated : Theme.of(context).cardColor;
+    final Color hintColor = isDark
+        ? AppColors.darkMutedForeground
+        : AppColors.mutedForeground;
+    final Color iconColor =
+    isDark ? AppColors.purpleLight : AppColors.primary;
+
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 8, 16, 8),
       child: TextField(
+        style: TextStyle(
+          color: Theme.of(context).colorScheme.onSurface,
+        ),
         onChanged: (String value) {
           setState(() => searchQuery = value);
           _applyFilters();
         },
         decoration: InputDecoration(
           hintText: 'Поиск цветов...',
-          prefixIcon: const Icon(Icons.search_rounded),
+          hintStyle: TextStyle(color: hintColor),
+          prefixIcon: Icon(
+            Icons.search_rounded,
+            color: iconColor,
+          ),
           suffixIcon: searchQuery.isNotEmpty
               ? IconButton(
-            icon: const Icon(Icons.close_rounded),
+            icon: Icon(
+              Icons.close_rounded,
+              color: hintColor,
+            ),
             onPressed: () {
               setState(() => searchQuery = '');
               _applyFilters();
             },
           )
               : null,
+          filled: true,
+          fillColor: fillColor,
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 14,
+          ),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(18),
+            borderSide: BorderSide(color: border),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(18),
+            borderSide: BorderSide(color: border),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(18),
+            borderSide: BorderSide(
+              color: isDark ? AppColors.purple : AppColors.primary,
+              width: 1.4,
+            ),
+          ),
         ),
       ),
     );
@@ -414,42 +533,64 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color bg = Theme.of(context).scaffoldBackgroundColor;
+    final Color muted = isDark
+        ? AppColors.darkMutedForeground
+        : AppColors.mutedForeground;
+
     return Scaffold(
-      backgroundColor: AppColors.background,
-      body: SafeArea(
-        child: isLoading
-            ? const Center(
-          child: CircularProgressIndicator(color: AppColors.primary),
-        )
-            : RefreshIndicator(
-          onRefresh: _loadProducts,
-          color: AppColors.primary,
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.only(bottom: 24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildHeader(),
-                _buildSmartBouquetBlock(),
-                _buildSearchBar(),
-                _buildFilters(),
-                _buildSection('Популярное', popularProducts),
-                _buildSection('Новинки', newProducts),
-                _buildSection('Все товары', allProducts),
-                if (filteredProducts.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.all(24),
-                    child: Center(
-                      child: Text(
-                        'Товары не найдены',
-                        style: TextStyle(
-                          fontSize: 16,
-                          color: AppColors.mutedForeground,
+      backgroundColor: bg,
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: isDark
+              ? const LinearGradient(
+            colors: [
+              AppColors.darkBackground,
+              AppColors.darkBackgroundSecondary,
+            ],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+          )
+              : null,
+        ),
+        child: SafeArea(
+          child: isLoading
+              ? Center(
+            child: CircularProgressIndicator(
+              color: isDark ? AppColors.purple : AppColors.primary,
+            ),
+          )
+              : RefreshIndicator(
+            onRefresh: _loadProducts,
+            color: isDark ? AppColors.purple : AppColors.primary,
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.only(bottom: 24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildHeader(),
+                  _buildSmartBouquetBlock(),
+                  _buildSearchBar(),
+                  _buildFilters(),
+                  _buildSection('Популярное', popularProducts),
+                  _buildSection('Новинки', newProducts),
+                  _buildSection('Все товары', allProducts),
+                  if (filteredProducts.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Center(
+                        child: Text(
+                          'Товары не найдены',
+                          style: TextStyle(
+                            fontSize: 16,
+                            color: muted,
+                          ),
                         ),
                       ),
                     ),
-                  ),
-              ],
+                ],
+              ),
             ),
           ),
         ),

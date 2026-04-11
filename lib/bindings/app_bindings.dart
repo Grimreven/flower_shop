@@ -1,4 +1,6 @@
 import 'package:get/get.dart';
+
+import '../controllers/address_book_controller.dart';
 import '../controllers/auth_controller.dart';
 import '../controllers/cart_controller.dart';
 import '../controllers/favorites_controller.dart';
@@ -8,28 +10,29 @@ import '../controllers/settings_controller.dart';
 class AppBindings extends Bindings {
   @override
   void dependencies() {
-    final AuthController authController = Get.put(
-      AuthController(),
-      permanent: true,
-    );
 
-    Get.put(
-      SettingsController(),
-      permanent: true,
-    );
+    Get.put<SettingsController>(SettingsController(), permanent: true);
+    Get.put<AuthController>(AuthController(), permanent: true);
 
-    Get.put(
-      FavoritesController(),
-      permanent: true,
-    );
+    final AuthController authController = Get.find<AuthController>();
 
-    Get.put(
+    Get.put<CartController>(
       CartController(authController: authController),
       permanent: true,
     );
 
-    Get.put(
+    Get.put<FavoritesController>(
+      FavoritesController(),
+      permanent: true,
+    );
+
+    Get.put<OrderController>(
       OrderController(authController: authController),
+      permanent: true,
+    );
+
+    Get.put<AddressBookController>(
+      AddressBookController(),
       permanent: true,
     );
   }

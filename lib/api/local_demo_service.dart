@@ -360,6 +360,7 @@ class LocalDemoService {
   Future<Map<String, dynamic>> createOrder(
       String token,
       List<Map<String, dynamic>> itemsMaps,
+      Map<String, dynamic> checkoutData,
       ) async {
     await ensureSeeded();
 
@@ -379,7 +380,7 @@ class LocalDemoService {
         1;
 
     final List<Map<String, dynamic>> orderItems = [];
-    double total = 0;
+    double itemsTotal = 0;
 
     for (final Map<String, dynamic> item in itemsMaps) {
       final int productId = _readProductId(item);
@@ -398,7 +399,7 @@ class LocalDemoService {
       }
 
       final double price = _numToDouble(product['price']);
-      total += price * quantity;
+      itemsTotal += price * quantity;
 
       orderItems.add({
         'product_id': productId,
@@ -409,10 +410,47 @@ class LocalDemoService {
       });
     }
 
+    final int bonusApplied =
+        ((checkoutData['applied_bonuses'] ?? checkoutData['bonus_applied']) as num?)
+            ?.toInt() ??
+            0;
+
+    final int bonusEarned =
+        ((checkoutData['earned_bonuses'] ?? checkoutData['bonus_earned']) as num?)
+            ?.toInt() ??
+            0;
+
+    final double deliveryCost = _numToDouble(checkoutData['delivery_cost']);
+    final double payableTotal = _numToDouble(checkoutData['payable_total']);
+
+    final String paymentMethod =
+        checkoutData['payment_method']?.toString() ?? 'Наличный расчёт';
+
+    final String deliveryMethod =
+        checkoutData['delivery_method']?.toString() ?? 'delivery';
+
+    final String deliveryAddress =
+        checkoutData['delivery_address']?.toString() ?? '';
+
+    final String recipientComment =
+        checkoutData['recipient_comment']?.toString() ?? '';
+
+    final String promoCode =
+        checkoutData['promo_code']?.toString() ?? '';
+
     final Map<String, dynamic> newOrder = {
       'id': newOrderId,
       'user_id': userId,
-      'total': total,
+      'total': payableTotal,
+      'items_total': itemsTotal,
+      'delivery_cost': deliveryCost,
+      'bonus_applied': bonusApplied,
+      'bonus_earned': bonusEarned,
+      'payment_method': paymentMethod,
+      'delivery_method': deliveryMethod,
+      'delivery_address': deliveryAddress,
+      'recipient_comment': recipientComment,
+      'promo_code': promoCode,
       'status': 'Принят',
       'created_at': DateTime.now().toIso8601String(),
       'items': orderItems,
@@ -421,7 +459,13 @@ class LocalDemoService {
     orders.insert(0, newOrder);
     await _saveOrders(userId, orders);
     await clearCart(token);
-    await _updateLoyaltyAfterOrder(userId, total);
+
+    await _updateLoyaltyAfterOrder(
+      userId,
+      payableTotal: payableTotal,
+      bonusApplied: bonusApplied,
+      bonusEarned: bonusEarned,
+    );
 
     return newOrder;
   }
@@ -439,7 +483,12 @@ class LocalDemoService {
     return _decodeList(raw);
   }
 
-  Future<void> _updateLoyaltyAfterOrder(int userId, double orderTotal) async {
+  Future<void> _updateLoyaltyAfterOrder(
+      int userId, {
+        required double payableTotal,
+        required int bonusApplied,
+        required int bonusEarned,
+      }) async {
     final List<Map<String, dynamic>> users = await _getUsers();
     final int index =
     users.indexWhere((u) => (u['id'] as num).toInt() == userId);
@@ -449,14 +498,19 @@ class LocalDemoService {
     }
 
     final double currentTotal = _numToDouble(users[index]['total_spent']);
-    final double updatedTotal = currentTotal + orderTotal;
+    final int currentPoints =
+    ((users[index]['loyalty_points'] ?? 0) as num).toInt();
+
+    final double updatedTotal = currentTotal + payableTotal;
+    final int updatedPoints =
+    (currentPoints - bonusApplied + bonusEarned).clamp(0, 1 << 30);
 
     final Map<String, dynamic> loyalty = _resolveLoyalty(updatedTotal);
 
     users[index] = {
       ...users[index],
       'total_spent': updatedTotal,
-      'loyalty_points': updatedTotal.round(),
+      'loyalty_points': updatedPoints,
       'loyalty_level': loyalty['level'],
       'loyalty_color': loyalty['color'],
     };
