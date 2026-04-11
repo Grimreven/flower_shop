@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
 import '../../controllers/order_controller.dart';
+import '../../models/order_model.dart';
 import '../../utils/app_colors.dart';
 import 'order_detail_screen.dart';
 
@@ -25,9 +26,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
   Widget _statusBadge(BuildContext context, String status) {
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
 
-    Color bg = isDark
-        ? AppColors.darkSurfaceElevated
-        : AppColors.primaryLight;
+    Color bg = isDark ? AppColors.darkSurfaceElevated : AppColors.primaryLight;
     Color fg = isDark ? AppColors.purpleLight : AppColors.primary;
 
     if (status.toLowerCase().contains('достав')) {
@@ -71,11 +70,13 @@ class _OrdersScreenState extends State<OrdersScreen> {
             Icon(
               Icons.receipt_long_outlined,
               size: 72,
-              color: isDark ? AppColors.purpleLight : AppColors.mutedForeground,
+              color: isDark
+                  ? AppColors.purpleLight
+                  : AppColors.mutedForeground,
             ),
             const SizedBox(height: 16),
             Text(
-              'У вас пока нет заказов 💐',
+              'У вас пока нет заказов',
               style: TextStyle(
                 fontSize: 22,
                 fontWeight: FontWeight.w700,
@@ -99,13 +100,279 @@ class _OrdersScreenState extends State<OrdersScreen> {
     );
   }
 
+  String _formatDate(String raw) {
+    if (raw.trim().isEmpty) {
+      return 'Дата неизвестна';
+    }
+
+    final DateTime? parsed = DateTime.tryParse(raw);
+    if (parsed == null) {
+      return raw;
+    }
+
+    const List<String> months = [
+      'января',
+      'февраля',
+      'марта',
+      'апреля',
+      'мая',
+      'июня',
+      'июля',
+      'августа',
+      'сентября',
+      'октября',
+      'ноября',
+      'декабря',
+    ];
+
+    final String day = parsed.day.toString().padLeft(2, '0');
+    final String month = months[parsed.month - 1];
+    final String year = parsed.year.toString();
+    final String hour = parsed.hour.toString().padLeft(2, '0');
+    final String minute = parsed.minute.toString().padLeft(2, '0');
+
+    return '$day $month $year, $hour:$minute';
+  }
+
+  String _itemsCountText(OrderModel order) {
+    final int count = order.items.fold<int>(
+      0,
+          (sum, item) => sum + item.quantity,
+    );
+
+    return '$count шт.';
+  }
+
+  Widget _infoRow(
+      BuildContext context,
+      String title,
+      String value, {
+        bool accent = false,
+      }) {
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color onSurface = Theme.of(context).colorScheme.onSurface;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Text(
+              title,
+              style: TextStyle(
+                color: isDark
+                    ? AppColors.darkMutedForeground
+                    : AppColors.mutedForeground,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Flexible(
+            child: Text(
+              value,
+              textAlign: TextAlign.right,
+              style: TextStyle(
+                color: accent
+                    ? (isDark ? AppColors.purpleLight : AppColors.primary)
+                    : onSurface,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _orderCard(BuildContext context, OrderModel order) {
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color cardColor = Theme.of(context).cardColor;
+    final Color onSurface = Theme.of(context).colorScheme.onSurface;
+    final Color borderColor = isDark ? AppColors.darkBorder : AppColors.border;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      decoration: BoxDecoration(
+        gradient: isDark ? AppColors.darkCardGradient : null,
+        color: isDark ? null : cardColor,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: borderColor),
+        boxShadow: [
+          BoxShadow(
+            color: isDark
+                ? AppColors.purple.withValues(alpha: 0.05)
+                : AppColors.shadow,
+            blurRadius: 16,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(24),
+        onTap: () {
+          orderController.initializeTrackingForOrder(order);
+          Get.to(() => OrderDetailScreen(order: order));
+        },
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 52,
+                    height: 52,
+                    decoration: BoxDecoration(
+                      gradient: isDark
+                          ? AppColors.darkBrandGradient
+                          : AppColors.brandGradient,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: (isDark
+                              ? AppColors.purple
+                              : AppColors.primary)
+                              .withValues(alpha: 0.18),
+                          blurRadius: 12,
+                          offset: const Offset(0, 6),
+                        ),
+                      ],
+                    ),
+                    child: const Icon(
+                      Icons.receipt_long_rounded,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Заказ #${order.id}',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w800,
+                            color: onSurface,
+                            fontSize: 16,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          _formatDate(order.createdAt),
+                          style: TextStyle(
+                            color: isDark
+                                ? AppColors.darkMutedForeground
+                                : AppColors.mutedForeground,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Icon(
+                    Icons.chevron_right_rounded,
+                    color: isDark
+                        ? AppColors.purpleLight
+                        : AppColors.mutedForeground,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+
+              Align(
+                alignment: Alignment.centerLeft,
+                child: _statusBadge(context, order.status),
+              ),
+              const SizedBox(height: 14),
+
+              _infoRow(context, 'Товаров', _itemsCountText(order)),
+              _infoRow(
+                context,
+                'Сумма товаров',
+                '${order.itemsTotal.toStringAsFixed(0)} ₽',
+              ),
+              _infoRow(
+                context,
+                'Доставка',
+                order.deliveryCost == 0
+                    ? 'Бесплатно'
+                    : '${order.deliveryCost.toStringAsFixed(0)} ₽',
+              ),
+              _infoRow(
+                context,
+                'Оплата',
+                order.paymentMethod.isEmpty
+                    ? 'Не указано'
+                    : order.paymentMethod,
+              ),
+              _infoRow(
+                context,
+                'Адрес',
+                order.deliveryAddress.isEmpty
+                    ? 'Не указан'
+                    : order.deliveryAddress,
+              ),
+
+              if (order.bonusApplied > 0)
+                _infoRow(
+                  context,
+                  'Списано бонусов',
+                  '-${order.bonusApplied}',
+                  accent: true,
+                ),
+
+              _infoRow(
+                context,
+                'Начислено бонусов',
+                '+${order.bonusEarned}',
+                accent: true,
+              ),
+
+              const SizedBox(height: 6),
+              const Divider(height: 1),
+              const SizedBox(height: 12),
+
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Итого',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      color: onSurface,
+                      fontSize: 16,
+                    ),
+                  ),
+                  ShaderMask(
+                    shaderCallback: (Rect bounds) =>
+                        (isDark
+                            ? AppColors.darkBrandGradient
+                            : AppColors.brandGradient)
+                            .createShader(bounds),
+                    child: Text(
+                      '${order.total.toStringAsFixed(0)} ₽',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 18,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
     final Color bg = Theme.of(context).scaffoldBackgroundColor;
-    final Color cardColor = Theme.of(context).cardColor;
     final Color onSurface = Theme.of(context).colorScheme.onSurface;
-    final Color borderColor = isDark ? AppColors.darkBorder : AppColors.border;
 
     return Scaffold(
       backgroundColor: bg,
@@ -146,102 +413,9 @@ class _OrdersScreenState extends State<OrdersScreen> {
             child: ListView.builder(
               padding: const EdgeInsets.all(16),
               itemCount: orders.length,
-              itemBuilder: (BuildContext context, int i) {
-                final order = orders[i];
-
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 14),
-                  decoration: BoxDecoration(
-                    gradient: isDark ? AppColors.darkCardGradient : null,
-                    color: isDark ? null : cardColor,
-                    borderRadius: BorderRadius.circular(24),
-                    border: Border.all(color: borderColor),
-                    boxShadow: [
-                      BoxShadow(
-                        color: isDark
-                            ? AppColors.purple.withValues(alpha: 0.05)
-                            : AppColors.shadow,
-                        blurRadius: 16,
-                        offset: const Offset(0, 8),
-                      ),
-                    ],
-                  ),
-                  child: ListTile(
-                    contentPadding: const EdgeInsets.all(16),
-                    leading: Container(
-                      width: 52,
-                      height: 52,
-                      decoration: BoxDecoration(
-                        gradient: isDark
-                            ? AppColors.darkBrandGradient
-                            : AppColors.brandGradient,
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: [
-                          BoxShadow(
-                            color: (isDark ? AppColors.purple : AppColors.primary)
-                                .withValues(alpha: 0.18),
-                            blurRadius: 12,
-                            offset: const Offset(0, 6),
-                          ),
-                        ],
-                      ),
-                      child: const Icon(
-                        Icons.receipt_long_rounded,
-                        color: Colors.white,
-                      ),
-                    ),
-                    title: Text(
-                      'Заказ #${order.id}',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        color: onSurface,
-                      ),
-                    ),
-                    subtitle: Padding(
-                      padding: const EdgeInsets.only(top: 8),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _statusBadge(context, order.status),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Итого:',
-                            style: TextStyle(
-                              color: isDark
-                                  ? AppColors.darkMutedForeground
-                                  : AppColors.mutedForeground,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                          ShaderMask(
-                            shaderCallback: (Rect bounds) => (isDark
-                                ? AppColors.darkBrandGradient
-                                : AppColors.brandGradient)
-                                .createShader(bounds),
-                            child: Text(
-                              '${order.total.toStringAsFixed(0)} ₽',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w800,
-                                fontSize: 16,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    trailing: Icon(
-                      Icons.chevron_right_rounded,
-                      color: isDark
-                          ? AppColors.purpleLight
-                          : AppColors.mutedForeground,
-                    ),
-                    onTap: () {
-                      orderController.initializeTrackingForOrder(order);
-                      Get.to(() => OrderDetailScreen(order: order));
-                    },
-                  ),
-                );
+              itemBuilder: (BuildContext context, int index) {
+                final OrderModel order = orders[index];
+                return _orderCard(context, order);
               },
             ),
           );

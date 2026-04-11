@@ -1,8 +1,9 @@
 import 'package:get/get.dart';
 import 'package:get_storage/get_storage.dart';
 
-import '../controllers/auth_controller.dart';
+import '../models/user.dart';
 import '../models/user_address.dart';
+import 'auth_controller.dart';
 
 class AddressBookController extends GetxController {
   static const String _storageKeyPrefix = 'saved_addresses_user_';
@@ -79,14 +80,17 @@ class AddressBookController extends GetxController {
     }
 
     bool primaryFound = false;
+
     final List<UserAddress> normalized = addresses.map((a) {
       if (a.isPrimary && !primaryFound) {
         primaryFound = true;
         return a;
       }
+
       if (a.isPrimary && primaryFound) {
         return a.copyWith(isPrimary: false);
       }
+
       return a;
     }).toList();
 
@@ -99,7 +103,9 @@ class AddressBookController extends GetxController {
       return;
     }
 
-    final bool hasSelected = addresses.any((a) => a.id == selectedAddressId.value);
+    final bool hasSelected =
+    addresses.any((a) => a.id == selectedAddressId.value);
+
     if (hasSelected) {
       return;
     }
@@ -131,11 +137,23 @@ class AddressBookController extends GetxController {
     }
   }
 
+  UserAddress? get primaryAddress {
+    if (addresses.isEmpty) {
+      return null;
+    }
+
+    try {
+      return addresses.firstWhere((a) => a.isPrimary);
+    } catch (_) {
+      return addresses.first;
+    }
+  }
+
   void selectAddress(int id) {
     selectedAddressId.value = id;
   }
 
-  void addAddress(UserAddress address) {
+  Future<void> addAddress(UserAddress address) async {
     final int nextId = addresses.isEmpty
         ? 1
         : addresses.map((e) => e.id).reduce((a, b) => a > b ? a : b) + 1;
@@ -149,6 +167,7 @@ class AddressBookController extends GetxController {
       final List<UserAddress> updated = addresses
           .map((a) => a.copyWith(isPrimary: false))
           .toList();
+
       updated.add(newAddress);
       addresses.assignAll(updated);
     } else {
@@ -156,12 +175,17 @@ class AddressBookController extends GetxController {
     }
 
     selectedAddressId.value = newAddress.id;
+
     _ensurePrimaryRules();
+    _ensureSelection();
     saveAddresses();
+    await _syncProfileAddressWithPrimary();
   }
 
-  void removeAddress(int id) {
-    final UserAddress? removing = addresses.firstWhereOrNull((a) => a.id == id);
+  Future<void> removeAddress(int id) async {
+    final UserAddress? removing =
+    addresses.firstWhereOrNull((a) => a.id == id);
+
     if (removing == null) {
       return;
     }
@@ -173,18 +197,24 @@ class AddressBookController extends GetxController {
       addresses[0] = first.copyWith(isPrimary: true);
     }
 
+    _ensurePrimaryRules();
     _ensureSelection();
     saveAddresses();
+    await _syncProfileAddressWithPrimary();
   }
 
-  void setPrimary(int id) {
+  Future<void> setPrimary(int id) async {
     final List<UserAddress> updated = addresses
         .map((a) => a.copyWith(isPrimary: a.id == id))
         .toList();
 
     addresses.assignAll(updated);
     selectedAddressId.value = id;
+
+    _ensurePrimaryRules();
+    _ensureSelection();
     saveAddresses();
+    await _syncProfileAddressWithPrimary();
   }
 
   void syncPrimaryFromProfileIfNeeded() {
@@ -204,18 +234,42 @@ class AddressBookController extends GetxController {
           isPrimary: true,
         ),
       );
+
       selectedAddressId.value = 1;
       saveAddresses();
       return;
     }
 
     final int primaryIndex = addresses.indexWhere((a) => a.isPrimary);
+
     if (primaryIndex == -1) {
       return;
     }
 
     final UserAddress primary = addresses[primaryIndex];
     addresses[primaryIndex] = primary.copyWith(address: profileAddress);
+
+    _ensurePrimaryRules();
+    _ensureSelection();
     saveAddresses();
+  }
+
+  Future<void> _syncProfileAddressWithPrimary() async {
+    final User? currentUser = authController.user.value;
+    if (currentUser == null) {
+      return;
+    }
+
+    final UserAddress? primary = primaryAddress;
+    final String newProfileAddress = primary?.fullAddress.trim() ?? '';
+
+    final String currentProfileAddress = currentUser.address?.trim() ?? '';
+    if (currentProfileAddress == newProfileAddress) {
+      return;
+    }
+
+    await authController.updateProfile(
+      currentUser.copyWith(address: newProfileAddress),
+    );
   }
 }
