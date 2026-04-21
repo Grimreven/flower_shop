@@ -22,17 +22,6 @@ class LoyaltyCard extends StatelessWidget {
     return Color(int.parse(hex, radix: 16));
   }
 
-  String get medal {
-    switch (level.toLowerCase()) {
-      case 'silver':
-        return '🥈';
-      case 'gold':
-        return '🥇';
-      default:
-        return '🥉';
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     double progress = nextLevelPoints > 0 ? points / nextLevelPoints : 0;
@@ -64,7 +53,7 @@ class LoyaltyCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            '$medal $level карта',
+            '$level карта',
             style: const TextStyle(
               fontSize: 22,
               fontWeight: FontWeight.w800,

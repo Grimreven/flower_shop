@@ -8,6 +8,8 @@ class OrderModel {
   final int bonusApplied;
   final int bonusEarned;
   final String paymentMethod;
+  final String paymentStatus;
+  final String cardMask;
   final String deliveryAddress;
   final String status;
   final List<OrderItem> items;
@@ -21,6 +23,8 @@ class OrderModel {
     required this.bonusApplied,
     required this.bonusEarned,
     required this.paymentMethod,
+    required this.paymentStatus,
+    required this.cardMask,
     required this.deliveryAddress,
     required this.status,
     required this.items,
@@ -29,7 +33,6 @@ class OrderModel {
 
   factory OrderModel.fromJson(Map<String, dynamic> json) {
     final List<dynamic> itemsJson = (json['items'] as List<dynamic>?) ?? [];
-
     final List<OrderItem> itemsList = itemsJson.map((dynamic e) {
       if (e is Map<String, dynamic>) {
         return OrderItem.fromJson(e);
@@ -58,6 +61,8 @@ class OrderModel {
       bonusApplied: parseInt(json['bonus_applied']),
       bonusEarned: parseInt(json['bonus_earned']),
       paymentMethod: json['payment_method']?.toString() ?? '',
+      paymentStatus: json['payment_status']?.toString() ?? '',
+      cardMask: json['card_mask']?.toString() ?? '',
       deliveryAddress: json['delivery_address']?.toString() ?? '',
       status: json['status']?.toString() ?? '',
       items: itemsList,

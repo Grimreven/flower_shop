@@ -45,7 +45,7 @@ class _CartScreenState extends State<CartScreen> {
             ),
             const SizedBox(height: 16),
             Text(
-              'Ваша корзина пуста 😕',
+              'Ваша корзина пуста',
               style: TextStyle(
                 fontSize: 22,
                 fontWeight: FontWeight.w700,
@@ -124,11 +124,13 @@ class _CartScreenState extends State<CartScreen> {
       child: InkWell(
         borderRadius: BorderRadius.circular(24),
         onTap: () {
-          Get.to(() => ProductDetail(
-            product: item.product,
-            cartController: cartController,
-            authController: authController,
-          ));
+          Get.to(
+                () => ProductDetail(
+              product: item.product,
+              cartController: cartController,
+              authController: authController,
+            ),
+          );
         },
         child: Padding(
           padding: const EdgeInsets.all(14),

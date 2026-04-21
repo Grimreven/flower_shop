@@ -86,7 +86,7 @@ class OrderSuccessScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  'Мы уже начали собирать ваш букет 💐',
+                  'Мы уже начали собирать ваш букет',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 16,
@@ -150,9 +150,8 @@ class OrderSuccessScreen extends StatelessWidget {
                   child: Text(
                     'Перейти к списку заказов',
                     style: TextStyle(
-                      color: isDark
-                          ? AppColors.purpleLight
-                          : AppColors.primary,
+                      color:
+                      isDark ? AppColors.purpleLight : AppColors.primary,
                       fontWeight: FontWeight.w700,
                     ),
                   ),

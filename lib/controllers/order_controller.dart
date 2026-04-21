@@ -20,7 +20,6 @@ class OrderController extends GetxController {
   final RxMap<int, int> trackingStepByOrderId = <int, int>{}.obs;
   final RxMap<int, DateTime> trackingEtaByOrderId = <int, DateTime>{}.obs;
   final Rxn<OrderModel> lastCreatedOrder = Rxn<OrderModel>();
-
   final Map<int, Timer> _trackingTimers = <int, Timer>{};
 
   OrderController({
@@ -32,7 +31,6 @@ class OrderController extends GetxController {
   @override
   void onInit() {
     super.onInit();
-
     _orderService = OrderService(token: authController.token.value);
 
     ever<String?>(authController.token, (String? newToken) {
@@ -46,6 +44,8 @@ class OrderController extends GetxController {
       List<model.CartItem> items, {
         required CheckoutSummary summary,
         required String paymentMethod,
+        required String paymentStatus,
+        required String cardMask,
         required String deliveryAddress,
         required String recipientComment,
         String promoCode = '',
@@ -63,6 +63,8 @@ class OrderController extends GetxController {
         checkoutData: {
           ...summary.toJson(),
           'payment_method': paymentMethod,
+          'payment_status': paymentStatus,
+          'card_mask': cardMask,
           'delivery_address': deliveryAddress,
           'recipient_comment': recipientComment,
           'promo_code': promoCode,
@@ -71,7 +73,6 @@ class OrderController extends GetxController {
 
       final ctrl.CartController cartController = Get.find<ctrl.CartController>();
       await cartController.clearLocalOnly();
-
       await authController.getProfile();
       await fetchUserOrders();
 
@@ -135,7 +136,6 @@ class OrderController extends GetxController {
 
     final OrderTrackingStage initialStage =
     OrderTrackingHelper.resolveInitialStage(order.status);
-
     final int initialIndex = OrderTrackingHelper.stageToIndex(initialStage);
 
     trackingStepByOrderId[order.id] = initialIndex;
@@ -177,7 +177,6 @@ class OrderController extends GetxController {
 
             trackingStepByOrderId.refresh();
             trackingEtaByOrderId.refresh();
-
             await _notifyAboutStatusChange(order.id, nextIndex);
           } else {
             timer.cancel();
