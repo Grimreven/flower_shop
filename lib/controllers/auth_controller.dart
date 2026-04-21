@@ -1,9 +1,10 @@
 import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../models/user.dart';
 import '../api/auth_service.dart';
 import '../api/local_demo_service.dart';
+import '../models/user.dart';
+import 'favorites_controller.dart';
 
 class AuthController extends GetxController {
   final AuthService _authService = AuthService();
@@ -19,6 +20,14 @@ class AuthController extends GetxController {
     LocalDemoService.instance.ensureSeeded();
   }
 
+  FavoritesController? _favoritesOrNull() {
+    try {
+      return Get.find<FavoritesController>();
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<void> loadToken() async {
     await LocalDemoService.instance.ensureSeeded();
 
@@ -27,6 +36,9 @@ class AuthController extends GetxController {
 
     if (token.value.isNotEmpty) {
       await getProfile();
+      await _favoritesOrNull()?.loadFavorites();
+    } else {
+      _favoritesOrNull()?.clearLocalState();
     }
   }
 
@@ -41,16 +53,20 @@ class AuthController extends GetxController {
     await prefs.remove('token');
     token.value = '';
     user.value = null;
+    _favoritesOrNull()?.clearLocalState();
   }
 
   Future<bool> login(String email, String password) async {
     try {
-      final Map<String, dynamic>? result =
-      await _authService.login(email, password);
+      final Map<String, dynamic>? result = await _authService.login(
+        email,
+        password,
+      );
 
       if (result != null && result['token'] != null) {
         await _saveToken(result['token'].toString());
         await getProfile();
+        await _favoritesOrNull()?.loadFavorites();
         return true;
       }
 
@@ -72,12 +88,16 @@ class AuthController extends GetxController {
 
   Future<bool> register(String name, String email, String password) async {
     try {
-      final Map<String, dynamic>? result =
-      await _authService.register(name, email, password);
+      final Map<String, dynamic>? result = await _authService.register(
+        name,
+        email,
+        password,
+      );
 
       if (result != null && result['token'] != null) {
         await _saveToken(result['token'].toString());
         await getProfile();
+        await _favoritesOrNull()?.loadFavorites();
         return true;
       }
 
@@ -100,8 +120,11 @@ class AuthController extends GetxController {
   Future<void> logout() async {
     final SharedPreferences prefs = await SharedPreferences.getInstance();
     await prefs.remove('token');
+
     token.value = '';
     user.value = null;
+
+    _favoritesOrNull()?.clearLocalState();
 
     Get.snackbar(
       'Выход',
@@ -116,8 +139,9 @@ class AuthController extends GetxController {
     }
 
     try {
-      final Map<String, dynamic>? data =
-      await _authService.getProfile(token.value);
+      final Map<String, dynamic>? data = await _authService.getProfile(
+        token.value,
+      );
 
       if (data == null) {
         Get.snackbar(
@@ -165,8 +189,10 @@ class AuthController extends GetxController {
     }
 
     try {
-      final Map<String, dynamic>? data =
-      await _authService.updateProfile(token.value, updatedUser);
+      final Map<String, dynamic>? data = await _authService.updateProfile(
+        token.value,
+        updatedUser,
+      );
 
       if (data == null) {
         Get.snackbar(
@@ -212,8 +238,10 @@ class AuthController extends GetxController {
     final User? currentUser = user.value;
 
     if (currentUser != null) {
-      final int newPoints =
-      (currentUser.loyaltyPoints + delta).clamp(0, 1 << 30);
+      final int newPoints = (currentUser.loyaltyPoints + delta).clamp(
+        0,
+        1 << 30,
+      );
 
       user.value = currentUser.copyWith(
         loyaltyPoints: newPoints.toInt(),

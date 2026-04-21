@@ -1,21 +1,30 @@
 import 'package:get/get.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 import '../api/api_service.dart';
+import '../api/favorites_service.dart';
+import '../controllers/auth_controller.dart';
 import '../models/product.dart';
 
 class FavoritesController extends GetxController {
-  static const String _favoritesKey = 'favorite_product_ids';
+  final AuthController authController = Get.find<AuthController>();
+  final FavoritesService _favoritesService = FavoritesService.instance;
 
   final RxList<int> favoriteIds = <int>[].obs;
   final RxList<Product> favoriteProducts = <Product>[].obs;
   final RxBool isLoading = false.obs;
+
+  bool get isAuthorized => authController.token.value.isNotEmpty;
 
   bool isFavorite(int productId) => favoriteIds.contains(productId);
 
   @override
   void onInit() {
     super.onInit();
+
+    ever<String>(authController.token, (_) async {
+      await loadFavorites();
+    });
+
     loadFavorites();
   }
 
@@ -23,14 +32,14 @@ class FavoritesController extends GetxController {
     isLoading.value = true;
 
     try {
-      final SharedPreferences prefs = await SharedPreferences.getInstance();
-      final List<String> storedIds =
-          prefs.getStringList(_favoritesKey) ?? <String>[];
+      if (!isAuthorized) {
+        favoriteIds.clear();
+        favoriteProducts.clear();
+        return;
+      }
 
-      final List<int> ids = storedIds
-          .map(int.tryParse)
-          .whereType<int>()
-          .toList();
+      final List<int> ids =
+      await _favoritesService.getFavorites(authController.token.value);
 
       favoriteIds.assignAll(ids);
 
@@ -40,6 +49,9 @@ class FavoritesController extends GetxController {
         allProducts.where((product) => ids.contains(product.id)).toList(),
       );
     } catch (e) {
+      favoriteIds.clear();
+      favoriteProducts.clear();
+
       Get.snackbar(
         'Ошибка',
         'Не удалось загрузить избранное',
@@ -50,26 +62,33 @@ class FavoritesController extends GetxController {
     }
   }
 
-  Future<void> _saveFavoriteIds() async {
-    final SharedPreferences prefs = await SharedPreferences.getInstance();
-    await prefs.setStringList(
-      _favoritesKey,
-      favoriteIds.map((id) => id.toString()).toList(),
-    );
-  }
-
   Future<void> toggleFavorite(Product product) async {
+    if (!isAuthorized) {
+      Get.snackbar(
+        'Требуется вход',
+        'Авторизуйтесь, чтобы добавлять товары в избранное',
+        snackPosition: SnackPosition.BOTTOM,
+      );
+      return;
+    }
+
     final bool wasFavorite = isFavorite(product.id);
 
     try {
+      await _favoritesService.toggleFavorite(
+        authController.token.value,
+        product.id,
+      );
+
       if (wasFavorite) {
         favoriteIds.remove(product.id);
         favoriteProducts.removeWhere((item) => item.id == product.id);
       } else {
         favoriteIds.add(product.id);
 
-        final bool alreadyExists =
-        favoriteProducts.any((item) => item.id == product.id);
+        final bool alreadyExists = favoriteProducts.any(
+              (item) => item.id == product.id,
+        );
 
         if (!alreadyExists) {
           favoriteProducts.add(product);
@@ -78,8 +97,6 @@ class FavoritesController extends GetxController {
 
       favoriteIds.refresh();
       favoriteProducts.refresh();
-
-      await _saveFavoriteIds();
 
       Get.snackbar(
         wasFavorite ? 'Удалено' : 'Добавлено',
@@ -98,14 +115,21 @@ class FavoritesController extends GetxController {
   }
 
   Future<void> removeFavorite(Product product) async {
+    if (!isAuthorized) {
+      return;
+    }
+
     try {
+      await _favoritesService.removeFavorite(
+        authController.token.value,
+        product.id,
+      );
+
       favoriteIds.remove(product.id);
       favoriteProducts.removeWhere((item) => item.id == product.id);
 
       favoriteIds.refresh();
       favoriteProducts.refresh();
-
-      await _saveFavoriteIds();
 
       Get.snackbar(
         'Удалено',
@@ -122,15 +146,20 @@ class FavoritesController extends GetxController {
   }
 
   Future<void> clearFavorites() async {
+    if (!isAuthorized) {
+      favoriteIds.clear();
+      favoriteProducts.clear();
+      return;
+    }
+
     try {
+      await _favoritesService.clearFavorites(authController.token.value);
+
       favoriteIds.clear();
       favoriteProducts.clear();
 
       favoriteIds.refresh();
       favoriteProducts.refresh();
-
-      final SharedPreferences prefs = await SharedPreferences.getInstance();
-      await prefs.remove(_favoritesKey);
 
       Get.snackbar(
         'Готово',
@@ -144,5 +173,12 @@ class FavoritesController extends GetxController {
         snackPosition: SnackPosition.BOTTOM,
       );
     }
+  }
+
+  void clearLocalState() {
+    favoriteIds.clear();
+    favoriteProducts.clear();
+    favoriteIds.refresh();
+    favoriteProducts.refresh();
   }
 }
