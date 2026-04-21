@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
 import '../../controllers/order_controller.dart';
+import '../../controllers/payment_controller.dart';
 import '../../helpers/order_tracking_helper.dart';
-import '../../models/order_item.dart';
 import '../../models/order_model.dart';
+import '../../models/payment_transaction_model.dart';
 import '../../utils/app_colors.dart';
 
 class OrderDetailScreen extends StatefulWidget {
@@ -21,93 +22,50 @@ class OrderDetailScreen extends StatefulWidget {
 
 class _OrderDetailScreenState extends State<OrderDetailScreen> {
   late final OrderController orderController;
+  late final PaymentController paymentController;
 
   @override
   void initState() {
     super.initState();
     orderController = Get.find<OrderController>();
+    paymentController = Get.find<PaymentController>();
+
     orderController.initializeTrackingForOrder(widget.order);
+    paymentController.loadPaymentTransactions();
   }
 
-  Widget _sectionTitle(BuildContext context, String title) {
-    return Text(
-      title,
-      style: TextStyle(
-        fontSize: 22,
-        fontWeight: FontWeight.w800,
-        color: Theme.of(context).colorScheme.onSurface,
-      ),
-    );
-  }
-
-  Widget _infoRow(
-      BuildContext context,
-      String title,
-      String value, {
-        bool highlight = false,
-      }) {
-    final bool isDark = Theme.of(context).brightness == Brightness.dark;
-    final Color onSurface = Theme.of(context).colorScheme.onSurface;
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Text(
-              title,
-              style: TextStyle(
-                fontSize: 14,
-                color: isDark
-                    ? AppColors.darkMutedForeground
-                    : AppColors.mutedForeground,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              value,
-              textAlign: TextAlign.right,
-              style: TextStyle(
-                fontSize: 14,
-                color: highlight
-                    ? (isDark ? AppColors.purpleLight : AppColors.primary)
-                    : onSurface,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _formatDate(String raw) {
-    if (raw.trim().isEmpty) {
-      return '—';
+  String _paymentStatusText(PaymentTransactionModel? transaction) {
+    if (transaction != null) {
+      return transaction.statusLabel;
     }
 
-    try {
-      final DateTime date = DateTime.parse(raw).toLocal();
-      final String day = date.day.toString().padLeft(2, '0');
-      final String month = date.month.toString().padLeft(2, '0');
-      final String year = date.year.toString();
-      final String hour = date.hour.toString().padLeft(2, '0');
-      final String minute = date.minute.toString().padLeft(2, '0');
-      return '$day.$month.$year $hour:$minute';
-    } catch (_) {
-      return raw;
+    if ((widget.order.paymentStatus ?? '').trim().isNotEmpty) {
+      return widget.order.paymentStatus!;
     }
+
+    return 'Статус платежа недоступен';
   }
 
-  String _statusLabelFromOrder(OrderModel order) {
-    if (order.status.trim().isNotEmpty) {
-      return order.status;
+  String _paymentMethodText(PaymentTransactionModel? transaction) {
+    if (transaction != null &&
+        (transaction.paymentMethodTitle ?? '').trim().isNotEmpty) {
+      return transaction.paymentMethodTitle!;
     }
-    return orderController.getTrackingStatusTitle(order.id);
+
+    return widget.order.paymentMethod;
+  }
+
+  String _paymentMethodDetails(PaymentTransactionModel? transaction) {
+    if (transaction != null &&
+        (transaction.paymentMethodSubtitle ?? '').trim().isNotEmpty) {
+      return transaction.paymentMethodSubtitle!;
+    }
+
+    if ((widget.order.cardMask ?? '').trim().isNotEmpty) {
+      return widget.order.cardMask!;
+    }
+
+    return '';
   }
 
   @override
@@ -116,7 +74,8 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
     final Color bg = Theme.of(context).scaffoldBackgroundColor;
     final Color cardColor = Theme.of(context).cardColor;
     final Color onSurface = Theme.of(context).colorScheme.onSurface;
-    final Color borderColor = isDark ? AppColors.darkBorder : AppColors.border;
+    final Color muted =
+    isDark ? AppColors.darkMutedForeground : AppColors.mutedForeground;
 
     return Scaffold(
       backgroundColor: bg,
@@ -155,6 +114,18 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
               ? 'Доставлен'
               : 'До ${orderController.getTrackingEtaText(widget.order.id)}';
 
+          PaymentTransactionModel? latestPayment;
+          try {
+            final List<PaymentTransactionModel> items =
+            paymentController.getPaymentsForOrderLocal(widget.order.id)
+              ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+            if (items.isNotEmpty) {
+              latestPayment = items.first;
+            }
+          } catch (_) {
+            latestPayment = null;
+          }
+
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
@@ -166,13 +137,81 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
               ),
               const SizedBox(height: 18),
               _OrderShortInfoCard(
+                order: widget.order,
                 currentStatus: currentStatusTitle,
                 etaText: isDelivered
                     ? 'Заказ уже у получателя'
                     : 'Ориентировочно к ${orderController.getTrackingEtaText(widget.order.id)}',
               ),
+              const SizedBox(height: 18),
+              Container(
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  gradient: isDark ? AppColors.darkCardGradient : null,
+                  color: isDark ? null : cardColor,
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(
+                    color: isDark ? AppColors.darkBorder : AppColors.border,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: isDark
+                          ? AppColors.purple.withValues(alpha: 0.08)
+                          : AppColors.shadow,
+                      blurRadius: 18,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Оплата',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                        color: onSurface,
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    _OrderInfoRow(
+                      title: 'Способ оплаты',
+                      value: _paymentMethodText(latestPayment),
+                    ),
+                    if (_paymentMethodDetails(latestPayment).isNotEmpty) ...[
+                      const SizedBox(height: 10),
+                      _OrderInfoRow(
+                        title: 'Детали',
+                        value: _paymentMethodDetails(latestPayment),
+                      ),
+                    ],
+                    const SizedBox(height: 10),
+                    _OrderInfoRow(
+                      title: 'Статус платежа',
+                      value: _paymentStatusText(latestPayment),
+                      highlight: true,
+                    ),
+                    if (latestPayment?.failureReason != null &&
+                        latestPayment!.failureReason!.trim().isNotEmpty) ...[
+                      const SizedBox(height: 10),
+                      _OrderInfoRow(
+                        title: 'Причина',
+                        value: latestPayment.failureReason!,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
               const SizedBox(height: 20),
-              _sectionTitle(context, 'Отслеживание заказа'),
+              Text(
+                'Отслеживание заказа',
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
+                  color: onSurface,
+                ),
+              ),
               const SizedBox(height: 14),
               Container(
                 padding: const EdgeInsets.all(18),
@@ -180,11 +219,13 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                   gradient: isDark ? AppColors.darkCardGradient : null,
                   color: isDark ? null : cardColor,
                   borderRadius: BorderRadius.circular(24),
-                  border: Border.all(color: borderColor),
+                  border: Border.all(
+                    color: isDark ? AppColors.darkBorder : AppColors.border,
+                  ),
                   boxShadow: [
                     BoxShadow(
                       color: isDark
-                          ? AppColors.purple.withOpacity(0.08)
+                          ? AppColors.purple.withValues(alpha: 0.08)
                           : AppColors.shadow,
                       blurRadius: 18,
                       offset: const Offset(0, 8),
@@ -214,99 +255,14 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                 ),
               ),
               const SizedBox(height: 20),
-              _sectionTitle(context, 'Информация о заказе'),
-              const SizedBox(height: 14),
-              Container(
-                padding: const EdgeInsets.all(18),
-                decoration: BoxDecoration(
-                  gradient: isDark ? AppColors.darkCardGradient : null,
-                  color: isDark ? null : cardColor,
-                  borderRadius: BorderRadius.circular(24),
-                  border: Border.all(color: borderColor),
-                  boxShadow: [
-                    BoxShadow(
-                      color: isDark
-                          ? AppColors.purple.withOpacity(0.08)
-                          : AppColors.shadow,
-                      blurRadius: 18,
-                      offset: const Offset(0, 8),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  children: [
-                    _infoRow(
-                      context,
-                      'Статус заказа',
-                      _statusLabelFromOrder(widget.order),
-                      highlight: true,
-                    ),
-                    _infoRow(
-                      context,
-                      'Создан',
-                      _formatDate(widget.order.createdAt),
-                    ),
-                    _infoRow(
-                      context,
-                      'Способ оплаты',
-                      widget.order.paymentMethod.isNotEmpty
-                          ? widget.order.paymentMethod
-                          : 'Не указан',
-                    ),
-                    if (widget.order.paymentStatus.isNotEmpty)
-                      _infoRow(
-                        context,
-                        'Статус оплаты',
-                        widget.order.paymentStatus,
-                        highlight: widget.order.paymentStatus == 'Оплачено',
-                      ),
-                    if (widget.order.cardMask.isNotEmpty)
-                      _infoRow(
-                        context,
-                        'Карта',
-                        widget.order.cardMask,
-                      ),
-                    _infoRow(
-                      context,
-                      'Адрес доставки',
-                      widget.order.deliveryAddress.isNotEmpty
-                          ? widget.order.deliveryAddress
-                          : 'Не указан',
-                    ),
-                    _infoRow(
-                      context,
-                      'Стоимость товаров',
-                      '${widget.order.itemsTotal.toStringAsFixed(0)} ₽',
-                    ),
-                    _infoRow(
-                      context,
-                      'Доставка',
-                      widget.order.deliveryCost == 0
-                          ? 'Бесплатно'
-                          : '${widget.order.deliveryCost.toStringAsFixed(0)} ₽',
-                    ),
-                    if (widget.order.bonusApplied > 0)
-                      _infoRow(
-                        context,
-                        'Списано бонусов',
-                        '-${widget.order.bonusApplied}',
-                      ),
-                    _infoRow(
-                      context,
-                      'Начислено бонусов',
-                      '+${widget.order.bonusEarned}',
-                    ),
-                    _infoRow(
-                      context,
-                      'Итого',
-                      '${widget.order.total.toStringAsFixed(0)} ₽',
-                      highlight: true,
-                    ),
-                  ],
+              Text(
+                'Состав заказа',
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
+                  color: onSurface,
                 ),
               ),
-              const SizedBox(height: 20),
-              _sectionTitle(context, 'Состав заказа'),
               const SizedBox(height: 12),
               ...widget.order.items.map((item) => _OrderItemCard(item: item)),
               const SizedBox(height: 10),
@@ -315,11 +271,13 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                   gradient: isDark ? AppColors.darkCardGradient : null,
                   color: isDark ? null : cardColor,
                   borderRadius: BorderRadius.circular(24),
-                  border: Border.all(color: borderColor),
+                  border: Border.all(
+                    color: isDark ? AppColors.darkBorder : AppColors.border,
+                  ),
                   boxShadow: [
                     BoxShadow(
                       color: isDark
-                          ? AppColors.purple.withOpacity(0.08)
+                          ? AppColors.purple.withValues(alpha: 0.08)
                           : AppColors.shadow,
                       blurRadius: 18,
                       offset: const Offset(0, 8),
@@ -327,31 +285,63 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                   ],
                 ),
                 padding: const EdgeInsets.all(18),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                child: Column(
                   children: [
-                    Text(
-                      'Итого',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                        color: onSurface,
-                      ),
+                    _OrderInfoRow(
+                      title: 'Товары',
+                      value: '${widget.order.itemsTotal.toStringAsFixed(0)} ₽',
                     ),
-                    ShaderMask(
-                      shaderCallback: (Rect bounds) =>
-                          (isDark
-                              ? AppColors.darkBrandGradient
-                              : AppColors.brandGradient)
-                              .createShader(bounds),
-                      child: Text(
-                        '${widget.order.total.toStringAsFixed(0)} ₽',
-                        style: const TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.w800,
-                          color: Colors.white,
-                        ),
+                    const SizedBox(height: 10),
+                    _OrderInfoRow(
+                      title: 'Доставка',
+                      value: widget.order.deliveryCost == 0
+                          ? 'Бесплатно'
+                          : '${widget.order.deliveryCost.toStringAsFixed(0)} ₽',
+                    ),
+                    if (widget.order.bonusApplied > 0) ...[
+                      const SizedBox(height: 10),
+                      _OrderInfoRow(
+                        title: 'Списано бонусов',
+                        value: '-${widget.order.bonusApplied}',
+                        highlight: true,
                       ),
+                    ],
+                    if (widget.order.bonusEarned > 0) ...[
+                      const SizedBox(height: 10),
+                      _OrderInfoRow(
+                        title: 'Начислено бонусов',
+                        value: '+${widget.order.bonusEarned}',
+                        highlight: true,
+                      ),
+                    ],
+                    const Divider(height: 26),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Итого',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                            color: onSurface,
+                          ),
+                        ),
+                        ShaderMask(
+                          shaderCallback: (Rect bounds) =>
+                              (isDark
+                                  ? AppColors.darkBrandGradient
+                                  : AppColors.brandGradient)
+                                  .createShader(bounds),
+                          child: Text(
+                            '${widget.order.total.toStringAsFixed(0)} ₽',
+                            style: const TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -362,7 +352,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                 decoration: BoxDecoration(
                   color: isDark
                       ? AppColors.darkSurfaceElevated
-                      : AppColors.primaryLight.withOpacity(0.55),
+                      : AppColors.primaryLight.withValues(alpha: 0.55),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Row(
@@ -376,21 +366,16 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                     const SizedBox(width: 10),
                     Expanded(
                       child: Text(
-                        'Это демонстрационный экран отслеживания заказа. '
-                            'Он показывает статус, состав заказа, оплату и ориентировочное время доставки.',
+                        'Это демонстрационный экран отслеживания заказа. Он показывает жизненный цикл заказа и платёжной операции: способ оплаты, статус платежа и этапы доставки.',
                         style: TextStyle(
-                          fontSize: 14,
-                          height: 1.4,
-                          color: isDark
-                              ? AppColors.darkMutedForeground
-                              : AppColors.mutedForeground,
+                          color: muted,
+                          height: 1.45,
                         ),
                       ),
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: 12),
             ],
           );
         }),
@@ -414,30 +399,32 @@ class _OrderTrackingHeroCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bool isDark = Theme.of(context).brightness == Brightness.dark;
-
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
-        gradient: isDark ? AppColors.darkBrandGradient : AppColors.brandGradient,
+        gradient: Theme.of(context).brightness == Brightness.dark
+            ? AppColors.darkBrandGradient
+            : AppColors.brandGradient,
         borderRadius: BorderRadius.circular(28),
         boxShadow: [
           BoxShadow(
-            color: (isDark ? AppColors.purple : AppColors.primary)
-                .withOpacity(0.18),
-            blurRadius: 18,
-            offset: const Offset(0, 8),
+            color: ((Theme.of(context).brightness == Brightness.dark
+                ? AppColors.purple
+                : AppColors.primary))
+                .withValues(alpha: 0.20),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
           ),
         ],
       ),
       child: Row(
         children: [
           Container(
-            width: 58,
-            height: 58,
+            width: 62,
+            height: 62,
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.14),
-              borderRadius: BorderRadius.circular(18),
+              color: Colors.white.withValues(alpha: 0.18),
+              shape: BoxShape.circle,
             ),
             child: const Icon(
               Icons.local_shipping_rounded,
@@ -445,7 +432,7 @@ class _OrderTrackingHeroCard extends StatelessWidget {
               size: 30,
             ),
           ),
-          const SizedBox(width: 14),
+          const SizedBox(width: 16),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -453,37 +440,36 @@ class _OrderTrackingHeroCard extends StatelessWidget {
                 Text(
                   'Заказ #$orderId',
                   style: const TextStyle(
+                    color: Colors.white,
                     fontSize: 14,
-                    color: Colors.white70,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 6),
                 Text(
                   currentStatusTitle,
                   style: const TextStyle(
-                    fontSize: 22,
                     color: Colors.white,
+                    fontSize: 22,
                     fontWeight: FontWeight.w800,
                   ),
                 ),
                 const SizedBox(height: 6),
                 Text(
                   currentStatusMessage,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    color: Colors.white70,
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.92),
                     height: 1.35,
                   ),
                 ),
                 const SizedBox(height: 10),
                 Container(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
+                    horizontal: 10,
+                    vertical: 6,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.14),
+                    color: Colors.white.withValues(alpha: 0.16),
                     borderRadius: BorderRadius.circular(999),
                   ),
                   child: Text(
@@ -504,71 +490,40 @@ class _OrderTrackingHeroCard extends StatelessWidget {
 }
 
 class _OrderShortInfoCard extends StatelessWidget {
+  final OrderModel order;
   final String currentStatus;
   final String etaText;
 
   const _OrderShortInfoCard({
+    required this.order,
     required this.currentStatus,
     required this.etaText,
   });
 
-  Widget _infoCell(
-      BuildContext context, {
-        required IconData icon,
-        required String label,
-        required String value,
-      }) {
-    final bool isDark = Theme.of(context).brightness == Brightness.dark;
-    final Color onSurface = Theme.of(context).colorScheme.onSurface;
-    final Color muted =
-    isDark ? AppColors.darkMutedForeground : AppColors.mutedForeground;
+  String _formatCreatedAt(dynamic value) {
+    if (value == null) {
+      return '—';
+    }
 
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: isDark
-              ? AppColors.darkSurfaceElevated
-              : AppColors.primaryLight.withOpacity(0.5),
-          borderRadius: BorderRadius.circular(18),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(
-              icon,
-              size: 18,
-              color: isDark ? AppColors.purpleLight : AppColors.primary,
-            ),
-            const SizedBox(height: 10),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                color: muted,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              value,
-              style: TextStyle(
-                fontSize: 14,
-                color: onSurface,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+    final DateTime? date = value is DateTime
+        ? value
+        : DateTime.tryParse(value.toString());
+
+    if (date == null) {
+      return value.toString();
+    }
+
+    final String day = date.day.toString().padLeft(2, '0');
+    final String month = date.month.toString().padLeft(2, '0');
+    final String year = date.year.toString();
+
+    return '$day.$month.$year';
   }
 
   @override
   Widget build(BuildContext context) {
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
     final Color cardColor = Theme.of(context).cardColor;
-    final Color borderColor = isDark ? AppColors.darkBorder : AppColors.border;
 
     return Container(
       padding: const EdgeInsets.all(18),
@@ -576,34 +531,91 @@ class _OrderShortInfoCard extends StatelessWidget {
         gradient: isDark ? AppColors.darkCardGradient : null,
         color: isDark ? null : cardColor,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: borderColor),
+        border: Border.all(
+          color: isDark ? AppColors.darkBorder : AppColors.border,
+        ),
         boxShadow: [
           BoxShadow(
             color: isDark
-                ? AppColors.purple.withOpacity(0.08)
+                ? AppColors.purple.withValues(alpha: 0.08)
                 : AppColors.shadow,
             blurRadius: 18,
             offset: const Offset(0, 8),
           ),
         ],
       ),
-      child: Row(
+      child: Column(
         children: [
-          _infoCell(
-            context,
-            icon: Icons.flag_rounded,
-            label: 'Статус',
+          _OrderInfoRow(
+            title: 'Статус заказа',
             value: currentStatus,
+            highlight: true,
           ),
-          const SizedBox(width: 12),
-          _infoCell(
-            context,
-            icon: Icons.schedule_rounded,
-            label: 'Ожидание',
+          const SizedBox(height: 10),
+          _OrderInfoRow(
+            title: 'Доставка',
             value: etaText,
+          ),
+          const SizedBox(height: 10),
+          _OrderInfoRow(
+            title: 'Адрес',
+            value: order.deliveryAddress,
+          ),
+          const SizedBox(height: 10),
+          _OrderInfoRow(
+            title: 'Дата создания',
+            value: _formatCreatedAt(order.createdAt),
           ),
         ],
       ),
+    );
+  }
+}
+
+class _OrderInfoRow extends StatelessWidget {
+  final String title;
+  final String value;
+  final bool highlight;
+
+  const _OrderInfoRow({
+    required this.title,
+    required this.value,
+    this.highlight = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color onSurface = Theme.of(context).colorScheme.onSurface;
+    final Color muted =
+    isDark ? AppColors.darkMutedForeground : AppColors.mutedForeground;
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          child: Text(
+            title,
+            style: TextStyle(
+              color: muted,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
+        const SizedBox(width: 16),
+        Expanded(
+          child: Text(
+            value,
+            textAlign: TextAlign.right,
+            style: TextStyle(
+              color: highlight
+                  ? (isDark ? AppColors.purpleLight : AppColors.primary)
+                  : onSurface,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -628,67 +640,74 @@ class _TimelineStepTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
-    final Color onSurface = Theme.of(context).colorScheme.onSurface;
     final Color muted =
     isDark ? AppColors.darkMutedForeground : AppColors.mutedForeground;
 
-    final Color accentColor = isCompleted || isActive
-        ? (isDark ? AppColors.purpleLight : AppColors.primary)
-        : (isDark ? AppColors.darkBorderSoft : AppColors.border);
+    final bool highlighted = isCompleted || isActive;
+    final Color accent =
+    isDark ? AppColors.purpleLight : AppColors.primary;
 
-    return Padding(
-      padding: EdgeInsets.only(bottom: isLast ? 0 : 18),
+    return IntrinsicHeight(
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(
-            width: 42,
-            child: Column(
-              children: [
-                Container(
-                  width: 42,
-                  height: 42,
-                  decoration: BoxDecoration(
-                    color: isCompleted || isActive
-                        ? accentColor.withOpacity(isDark ? 0.18 : 0.10)
-                        : (isDark
-                        ? AppColors.darkSurfaceElevated
-                        : AppColors.primaryLight),
-                    shape: BoxShape.circle,
-                    border: Border.all(color: accentColor),
-                  ),
-                  child: Icon(
-                    isCompleted ? Icons.check_rounded : icon,
-                    color: accentColor,
-                    size: 20,
+          Column(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  gradient: highlighted
+                      ? (isDark
+                      ? AppColors.darkBrandGradient
+                      : AppColors.brandGradient)
+                      : null,
+                  color: highlighted
+                      ? null
+                      : (isDark
+                      ? AppColors.darkSurfaceSoft
+                      : AppColors.primaryLight.withValues(alpha: 0.55)),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  icon,
+                  color: highlighted
+                      ? Colors.white
+                      : (isDark
+                      ? AppColors.purpleLight
+                      : AppColors.primary),
+                ),
+              ),
+              if (!isLast)
+                Expanded(
+                  child: Container(
+                    width: 2,
+                    margin: const EdgeInsets.symmetric(vertical: 6),
+                    color: highlighted
+                        ? accent.withValues(alpha: 0.55)
+                        : muted.withValues(alpha: 0.25),
                   ),
                 ),
-                if (!isLast)
-                  Container(
-                    width: 2,
-                    height: 34,
-                    margin: const EdgeInsets.symmetric(vertical: 6),
-                    color: accentColor.withOpacity(0.5),
-                  ),
-              ],
-            ),
+            ],
           ),
           const SizedBox(width: 14),
           Expanded(
             child: Padding(
-              padding: const EdgeInsets.only(top: 6),
+              padding: const EdgeInsets.only(top: 6, bottom: 14),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     title,
                     style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w800,
-                      color: onSurface,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: highlighted
+                          ? Theme.of(context).colorScheme.onSurface
+                          : muted,
                     ),
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 4),
                   Text(
                     subtitle,
                     style: TextStyle(
@@ -708,7 +727,7 @@ class _TimelineStepTile extends StatelessWidget {
 }
 
 class _OrderItemCard extends StatelessWidget {
-  final OrderItem item;
+  final dynamic item;
 
   const _OrderItemCard({
     required this.item,
@@ -721,7 +740,12 @@ class _OrderItemCard extends StatelessWidget {
     final Color onSurface = Theme.of(context).colorScheme.onSurface;
     final Color muted =
     isDark ? AppColors.darkMutedForeground : AppColors.mutedForeground;
-    final Color borderColor = isDark ? AppColors.darkBorder : AppColors.border;
+
+    final String imageUrl = item.imageUrl?.toString() ?? '';
+    final String title = item.name?.toString() ?? 'Товар';
+    final int quantity = item.quantity is int ? item.quantity as int : 1;
+    final double price =
+    item.price is num ? (item.price as num).toDouble() : 0.0;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -730,54 +754,49 @@ class _OrderItemCard extends StatelessWidget {
         gradient: isDark ? AppColors.darkCardGradient : null,
         color: isDark ? null : cardColor,
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: borderColor),
+        border: Border.all(
+          color: isDark ? AppColors.darkBorder : AppColors.border,
+        ),
         boxShadow: [
           BoxShadow(
             color: isDark
-                ? AppColors.purple.withOpacity(0.08)
+                ? AppColors.purple.withValues(alpha: 0.06)
                 : AppColors.shadow,
-            blurRadius: 16,
-            offset: const Offset(0, 8),
+            blurRadius: 14,
+            offset: const Offset(0, 6),
           ),
         ],
       ),
       child: Row(
         children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(16),
-            child: item.imageUrl.isNotEmpty
+          Container(
+            width: 76,
+            height: 76,
+            clipBehavior: Clip.antiAlias,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(18),
+              color: isDark
+                  ? AppColors.darkSurfaceElevated
+                  : AppColors.primaryLight.withValues(alpha: 0.45),
+            ),
+            child: imageUrl.isNotEmpty
                 ? Image.network(
-              item.imageUrl,
-              width: 82,
-              height: 82,
+              imageUrl,
               fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => Container(
-                width: 82,
-                height: 82,
+              errorBuilder: (_, __, ___) => Icon(
+                Icons.local_florist_rounded,
                 color: isDark
-                    ? AppColors.darkSurfaceSoft
-                    : AppColors.primaryLight,
-                alignment: Alignment.center,
-                child: Icon(
-                  Icons.image_not_supported_outlined,
-                  color: isDark
-                      ? AppColors.purpleLight
-                      : AppColors.primary,
-                ),
+                    ? AppColors.purpleLight
+                    : AppColors.primary,
+                size: 34,
               ),
             )
-                : Container(
-              width: 82,
-              height: 82,
+                : Icon(
+              Icons.local_florist_rounded,
               color: isDark
-                  ? AppColors.darkSurfaceSoft
-                  : AppColors.primaryLight,
-              alignment: Alignment.center,
-              child: Icon(
-                Icons.local_florist_rounded,
-                color:
-                isDark ? AppColors.purpleLight : AppColors.primary,
-              ),
+                  ? AppColors.purpleLight
+                  : AppColors.primary,
+              size: 34,
             ),
           ),
           const SizedBox(width: 14),
@@ -786,31 +805,29 @@ class _OrderItemCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  item.name,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
+                  title,
                   style: TextStyle(
                     fontSize: 15,
-                    fontWeight: FontWeight.w800,
+                    fontWeight: FontWeight.w700,
                     color: onSurface,
                   ),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 6),
                 Text(
-                  'Количество: ${item.quantity}',
+                  'Количество: $quantity',
                   style: TextStyle(
-                    fontSize: 13,
                     color: muted,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  '${item.price.toStringAsFixed(0)} ₽',
+                  '${price.toStringAsFixed(0)} ₽',
                   style: TextStyle(
-                    fontSize: 15,
+                    color: isDark
+                        ? AppColors.purpleLight
+                        : AppColors.primary,
                     fontWeight: FontWeight.w800,
-                    color: isDark ? AppColors.purpleLight : AppColors.primary,
                   ),
                 ),
               ],

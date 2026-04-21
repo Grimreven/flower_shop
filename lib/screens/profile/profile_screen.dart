@@ -1,46 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
-import '../../controllers/auth_controller.dart';
-import '../../controllers/order_controller.dart';
-import '../../controllers/settings_controller.dart';
-import '../../models/user.dart';
 import '../../api/local_demo_service.dart';
 import '../../api/notification_service.dart';
+import '../../controllers/auth_controller.dart';
+import '../../controllers/order_controller.dart';
+import '../../controllers/payment_controller.dart';
+import '../../controllers/settings_controller.dart';
+import '../../models/payment_method_model.dart';
+import '../../models/user.dart';
 import '../../utils/app_colors.dart';
 import 'loyalty_card.dart';
-
-class ProfilePaymentMethod {
-  final String id;
-  final String title;
-  final String details;
-  final IconData icon;
-  final bool isDefault;
-
-  const ProfilePaymentMethod({
-    required this.id,
-    required this.title,
-    required this.details,
-    required this.icon,
-    required this.isDefault,
-  });
-
-  ProfilePaymentMethod copyWith({
-    String? id,
-    String? title,
-    String? details,
-    IconData? icon,
-    bool? isDefault,
-  }) {
-    return ProfilePaymentMethod(
-      id: id ?? this.id,
-      title: title ?? this.title,
-      details: details ?? this.details,
-      icon: icon ?? this.icon,
-      isDefault: isDefault ?? this.isDefault,
-    );
-  }
-}
 
 class LoyaltyPreviewData {
   final String level;
@@ -71,109 +41,137 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final AuthController authController = Get.find<AuthController>();
   final SettingsController settingsController = Get.find<SettingsController>();
   final OrderController orderController = Get.find<OrderController>();
+  final PaymentController paymentController = Get.find<PaymentController>();
 
   User? editedUser;
+  User? _savedUserSnapshot;
+
   bool isLoading = true;
   bool isEditing = false;
   String activeSection = 'info';
 
-  late TextEditingController nameController;
-  late TextEditingController emailController;
-  late TextEditingController phoneController;
-  late TextEditingController addressController;
-
-  List<ProfilePaymentMethod> paymentMethods = const [
-    ProfilePaymentMethod(
-      id: 'card_1',
-      title: 'Visa',
-      details: '**** 4587',
-      icon: Icons.credit_card_rounded,
-      isDefault: true,
-    ),
-    ProfilePaymentMethod(
-      id: 'cash_1',
-      title: 'Наличный расчёт',
-      details: 'Оплата при получении',
-      icon: Icons.payments_rounded,
-      isDefault: false,
-    ),
-  ];
+  late final TextEditingController nameController;
+  late final TextEditingController emailController;
+  late final TextEditingController phoneController;
+  late final TextEditingController addressController;
 
   @override
   void initState() {
     super.initState();
+
+    nameController = TextEditingController();
+    emailController = TextEditingController();
+    phoneController = TextEditingController();
+    addressController = TextEditingController();
+
     _loadProfile();
   }
 
   @override
   void dispose() {
-    if (!isLoading) {
-      nameController.dispose();
-      emailController.dispose();
-      phoneController.dispose();
-      addressController.dispose();
-    }
+    FocusManager.instance.primaryFocus?.unfocus();
+
+    nameController.dispose();
+    emailController.dispose();
+    phoneController.dispose();
+    addressController.dispose();
+
     super.dispose();
   }
 
+  void _unfocusEverything() {
+    final FocusScopeNode scope = FocusScope.of(context);
+    if (!scope.hasPrimaryFocus) {
+      scope.unfocus();
+    }
+  }
+
   Future<void> _loadProfile() async {
+    if (!mounted) return;
+
     setState(() => isLoading = true);
 
     final User? profile = await authController.getProfile();
     await orderController.fetchUserOrders();
+    await paymentController.loadPaymentMethods();
+    await paymentController.loadPaymentTransactions();
 
-    if (!mounted) {
-      return;
-    }
+    if (!mounted) return;
 
     if (profile == null) {
       setState(() => isLoading = false);
       return;
     }
 
+    editedUser = profile;
+    _savedUserSnapshot = profile;
+
+    nameController.text = profile.name;
+    emailController.text = profile.email;
+    phoneController.text = profile.phone ?? '';
+    addressController.text = profile.address ?? '';
+
     setState(() {
-      editedUser = profile;
-      nameController = TextEditingController(text: profile.name);
-      emailController = TextEditingController(text: profile.email);
-      phoneController = TextEditingController(text: profile.phone ?? '');
-      addressController = TextEditingController(text: profile.address ?? '');
+      isEditing = false;
       isLoading = false;
     });
   }
 
   void _showMessage(String msg) {
-    if (!mounted) {
-      return;
-    }
+    if (!mounted) return;
 
-    ScaffoldMessenger.of(context).showSnackBar(
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    messenger?.hideCurrentSnackBar();
+    messenger?.showSnackBar(
       SnackBar(content: Text(msg)),
     );
   }
 
+  void _startEditing() {
+    _unfocusEverything();
+
+    final User? user = editedUser;
+    if (user == null) return;
+
+    _savedUserSnapshot = user;
+
+    nameController.text = user.name;
+    emailController.text = user.email;
+    phoneController.text = user.phone ?? '';
+    addressController.text = user.address ?? '';
+
+    setState(() {
+      isEditing = true;
+      activeSection = 'info';
+    });
+  }
+
   Future<void> handleSave() async {
-    if (editedUser == null) {
-      return;
-    }
+    final User? currentUser = editedUser;
+    if (currentUser == null) return;
+
+    _unfocusEverything();
 
     setState(() => isLoading = true);
 
-    final User? updated = await authController.updateProfile(editedUser!);
+    final User? updated = await authController.updateProfile(currentUser);
 
-    if (!mounted) {
-      return;
-    }
+    if (!mounted) return;
 
     if (updated != null) {
+      editedUser = updated;
+      _savedUserSnapshot = updated;
+
+      nameController.text = updated.name;
+      emailController.text = updated.email;
+      phoneController.text = updated.phone ?? '';
+      addressController.text = updated.address ?? '';
+
       setState(() {
-        editedUser = updated;
         isEditing = false;
         isLoading = false;
-        nameController.text = updated.name;
-        emailController.text = updated.email;
-        phoneController.text = updated.phone ?? '';
-        addressController.text = updated.address ?? '';
       });
+
       _showMessage('Профиль успешно обновлён');
     } else {
       setState(() => isLoading = false);
@@ -182,18 +180,42 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   void handleCancel() {
+    _unfocusEverything();
+
+    final User? snapshot = _savedUserSnapshot ?? editedUser;
+    if (snapshot == null) return;
+
+    editedUser = snapshot;
+
+    nameController.text = snapshot.name;
+    emailController.text = snapshot.email;
+    phoneController.text = snapshot.phone ?? '';
+    addressController.text = snapshot.address ?? '';
+
     setState(() {
       isEditing = false;
-      if (editedUser != null) {
-        nameController.text = editedUser!.name;
-        emailController.text = editedUser!.email;
-        phoneController.text = editedUser!.phone ?? '';
-        addressController.text = editedUser!.address ?? '';
-      }
+    });
+  }
+
+  void _changeSection(String id) {
+    _unfocusEverything();
+
+    if (activeSection == id) return;
+
+    if (isEditing && id != 'info') {
+      handleCancel();
+    }
+
+    if (!mounted) return;
+
+    setState(() {
+      activeSection = id;
     });
   }
 
   Future<void> handleLogout() async {
+    _unfocusEverything();
+
     final bool? confirmed = await showDialog<bool>(
       context: context,
       builder: (BuildContext context) {
@@ -246,14 +268,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     if (confirmed == true) {
       await authController.logout();
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
       Get.offAllNamed('/main');
     }
   }
 
   Future<void> _resetDemoData() async {
+    _unfocusEverything();
+
     final bool? confirmed = await showDialog<bool>(
       context: context,
       builder: (BuildContext context) {
@@ -306,16 +328,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
       },
     );
 
-    if (confirmed != true) {
-      return;
-    }
+    if (confirmed != true) return;
 
     await LocalDemoService.instance.resetDemoData();
     await authController.logout();
 
-    if (!mounted) {
-      return;
-    }
+    if (!mounted) return;
 
     _showMessage('Демо-данные успешно сброшены');
     Get.offAllNamed('/main');
@@ -361,9 +379,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
           (double sum, order) => sum + order.total,
     );
 
-    final double totalSpent = ordersSpent > user.totalSpent
-        ? ordersSpent
-        : user.totalSpent;
+    final double totalSpent =
+    ordersSpent > user.totalSpent ? ordersSpent : user.totalSpent;
 
     final int points = totalSpent.round();
 
@@ -399,248 +416,61 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Future<void> _showPaymentMethodDialog({
-    ProfilePaymentMethod? method,
-  }) async {
-    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+  Future<void> _showAddCardDialog() async {
+    _unfocusEverything();
 
-    final TextEditingController titleController = TextEditingController(
-      text: method?.title ?? '',
-    );
-    final TextEditingController detailsController = TextEditingController(
-      text: method?.details ?? '',
-    );
-
-    IconData selectedIcon = method?.icon ?? Icons.credit_card_rounded;
-
-    final List<Map<String, dynamic>> icons = [
-      {'icon': Icons.credit_card_rounded, 'label': 'Карта'},
-      {'icon': Icons.payments_rounded, 'label': 'Наличные'},
-      {'icon': Icons.account_balance_wallet_rounded, 'label': 'Кошелёк'},
-      {'icon': Icons.phone_android_rounded, 'label': 'Телефон'},
-    ];
-
-    await showModalBottomSheet<void>(
+    final PaymentCardFormResult? result =
+    await showModalBottomSheet<PaymentCardFormResult>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: isDark ? AppColors.darkSurface : Colors.white,
+      useSafeArea: true,
+      backgroundColor: Theme.of(context).brightness == Brightness.dark
+          ? AppColors.darkSurface
+          : Colors.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
       builder: (BuildContext context) {
-        return StatefulBuilder(
-          builder: (BuildContext context, void Function(void Function()) setModalState) {
-            return Padding(
-              padding: EdgeInsets.fromLTRB(
-                20,
-                20,
-                20,
-                MediaQuery.of(context).viewInsets.bottom + 20,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    method == null
-                        ? 'Добавить способ оплаты'
-                        : 'Редактировать способ оплаты',
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  const SizedBox(height: 18),
-                  TextField(
-                    controller: titleController,
-                    decoration: const InputDecoration(
-                      labelText: 'Название',
-                      hintText: 'Например, Visa',
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: detailsController,
-                    decoration: const InputDecoration(
-                      labelText: 'Описание',
-                      hintText: 'Например, **** 4587',
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  const Text(
-                    'Иконка',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Wrap(
-                    spacing: 10,
-                    runSpacing: 10,
-                    children: icons.map((item) {
-                      final bool isSelected = selectedIcon == item['icon'];
-
-                      return GestureDetector(
-                        onTap: () {
-                          setModalState(() {
-                            selectedIcon = item['icon'] as IconData;
-                          });
-                        },
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 12,
-                          ),
-                          decoration: BoxDecoration(
-                            gradient: isSelected
-                                ? (isDark
-                                ? AppColors.darkBrandGradient
-                                : AppColors.brandGradient)
-                                : null,
-                            color: isSelected
-                                ? null
-                                : (isDark
-                                ? AppColors.darkSurfaceElevated
-                                : AppColors.primaryLight.withValues(alpha: 0.45)),
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                item['icon'] as IconData,
-                                color: isSelected
-                                    ? Colors.white
-                                    : (isDark
-                                    ? AppColors.purpleLight
-                                    : AppColors.primary),
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                item['label'] as String,
-                                style: TextStyle(
-                                  color: isSelected
-                                      ? Colors.white
-                                      : Theme.of(context).colorScheme.onSurface,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                  const SizedBox(height: 20),
-                  SizedBox(
-                    width: double.infinity,
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        gradient: isDark
-                            ? AppColors.darkBrandGradient
-                            : AppColors.brandGradient,
-                        borderRadius: BorderRadius.circular(18),
-                      ),
-                      child: ElevatedButton(
-                        onPressed: () {
-                          final String title = titleController.text.trim();
-                          final String details = detailsController.text.trim();
-
-                          if (title.isEmpty || details.isEmpty) {
-                            _showMessage('Заполните все поля');
-                            return;
-                          }
-
-                          setState(() {
-                            if (method == null) {
-                              paymentMethods = [
-                                ...paymentMethods,
-                                ProfilePaymentMethod(
-                                  id: DateTime.now()
-                                      .millisecondsSinceEpoch
-                                      .toString(),
-                                  title: title,
-                                  details: details,
-                                  icon: selectedIcon,
-                                  isDefault: paymentMethods.isEmpty,
-                                ),
-                              ];
-                            } else {
-                              paymentMethods = paymentMethods.map((item) {
-                                if (item.id == method.id) {
-                                  return item.copyWith(
-                                    title: title,
-                                    details: details,
-                                    icon: selectedIcon,
-                                  );
-                                }
-                                return item;
-                              }).toList();
-                            }
-                          });
-
-                          Navigator.of(context).pop();
-                          _showMessage(
-                            method == null
-                                ? 'Способ оплаты добавлен'
-                                : 'Способ оплаты обновлён',
-                          );
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.transparent,
-                          shadowColor: Colors.transparent,
-                          foregroundColor: Colors.white,
-                          minimumSize: const Size.fromHeight(54),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(18),
-                          ),
-                        ),
-                        child: Text(
-                          method == null ? 'Добавить' : 'Сохранить',
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            );
-          },
-        );
+        return const _PaymentCardBottomSheet();
       },
     );
 
-    titleController.dispose();
-    detailsController.dispose();
+    if (result == null) return;
+
+    try {
+      await paymentController.addCardMethod(
+        cardNumber: result.cardNumber,
+        expiryMonth: result.expiryMonth,
+        expiryYear: result.expiryYear,
+        setAsDefault: result.setAsDefault,
+      );
+      _showMessage('Карта успешно добавлена');
+    } catch (e) {
+      _showMessage('Ошибка при добавлении карты: $e');
+    }
   }
 
-  void _setDefaultPaymentMethod(String id) {
-    setState(() {
-      paymentMethods = paymentMethods
-          .map((item) => item.copyWith(isDefault: item.id == id))
-          .toList();
-    });
 
-    _showMessage('Способ оплаты по умолчанию обновлён');
+  Future<void> _setDefaultPaymentMethod(String id) async {
+    _unfocusEverything();
+
+    try {
+      await paymentController.setDefaultMethod(id);
+      _showMessage('Способ оплаты по умолчанию обновлён');
+    } catch (e) {
+      _showMessage('Ошибка: $e');
+    }
   }
 
-  void _deletePaymentMethod(String id) {
-    final bool wasDefault =
-    paymentMethods.any((item) => item.id == id && item.isDefault);
+  Future<void> _deletePaymentMethod(String id) async {
+    _unfocusEverything();
 
-    setState(() {
-      paymentMethods = paymentMethods.where((item) => item.id != id).toList();
-
-      if (wasDefault && paymentMethods.isNotEmpty) {
-        paymentMethods = paymentMethods.asMap().entries.map((entry) {
-          if (entry.key == 0) {
-            return entry.value.copyWith(isDefault: true);
-          }
-          return entry.value.copyWith(isDefault: false);
-        }).toList();
-      }
-    });
-
-    _showMessage('Способ оплаты удалён');
+    try {
+      await paymentController.deleteMethod(id);
+      _showMessage('Способ оплаты удалён');
+    } catch (e) {
+      _showMessage('Ошибка: $e');
+    }
   }
 
   Widget _sectionButton(
@@ -654,7 +484,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     return Expanded(
       child: GestureDetector(
-        onTap: () => setState(() => activeSection = id),
+        onTap: () => _changeSection(id),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 180),
           margin: const EdgeInsets.all(4),
@@ -746,331 +576,451 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildSettingsSection(BuildContext context) {
+  Widget _buildPaymentMethodTile(
+      BuildContext context,
+      PaymentMethodModel method,
+      ) {
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Obx(
-          () {
-        final bool notificationsEnabled = _notificationsEnabled();
-
-        return Column(
-          children: [
-            _card(
-              context,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Настройки приложения',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Уведомления'),
-                    subtitle: Text(
-                      notificationsEnabled
-                          ? 'Все уведомления включены'
-                          : 'Все уведомления выключены',
-                      style: TextStyle(
-                        color: isDark
-                            ? AppColors.darkMutedForeground
-                            : AppColors.mutedForeground,
-                      ),
-                    ),
-                    value: notificationsEnabled,
-                    activeThumbColor:
-                    isDark ? AppColors.purple : AppColors.primary,
-                    onChanged: _toggleAllNotifications,
-                  ),
-                  const Divider(),
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: Container(
-                      width: 42,
-                      height: 42,
-                      decoration: BoxDecoration(
-                        gradient: isDark
-                            ? AppColors.darkBrandGradient
-                            : AppColors.brandGradient,
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: const Icon(
-                        Icons.notifications_active_rounded,
-                        color: Colors.white,
-                      ),
-                    ),
-                    title: const Text('Проверить уведомления'),
-                    subtitle: Text(
-                      'Показать системное тестовое уведомление',
-                      style: TextStyle(
-                        color: isDark
-                            ? AppColors.darkMutedForeground
-                            : AppColors.mutedForeground,
-                      ),
-                    ),
-                    trailing: Icon(
-                      Icons.chevron_right_rounded,
-                      color: isDark
-                          ? AppColors.purpleLight
-                          : AppColors.mutedForeground,
-                    ),
-                    onTap: _sendTestNotification,
-                  ),
-                  const Divider(),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Тёмная тема'),
-                    subtitle: Text(
-                      settingsController.darkTheme.value
-                          ? 'Тёмное оформление включено'
-                          : 'Светлое оформление включено',
-                      style: TextStyle(
-                        color: isDark
-                            ? AppColors.darkMutedForeground
-                            : AppColors.mutedForeground,
-                      ),
-                    ),
-                    value: settingsController.darkTheme.value,
-                    activeThumbColor:
-                    isDark ? AppColors.purple : AppColors.primary,
-                    onChanged: (bool val) => settingsController.setDarkTheme(val),
-                  ),
-                ],
-              ),
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: isDark
+            ? AppColors.darkSurfaceElevated
+            : AppColors.primaryLight.withValues(alpha: 0.35),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: isDark ? AppColors.darkBorder : Colors.transparent,
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 46,
+            height: 46,
+            decoration: BoxDecoration(
+              gradient: isDark
+                  ? AppColors.darkBrandGradient
+                  : AppColors.brandGradient,
+              borderRadius: BorderRadius.circular(14),
             ),
-            const SizedBox(height: 12),
-            _card(
-              context,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Демо-режим',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    'Сброс вернёт приложение к начальному состоянию для показа на защите.',
-                    style: TextStyle(
-                      color: isDark
-                          ? AppColors.darkMutedForeground
-                          : AppColors.mutedForeground,
-                      height: 1.45,
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  SizedBox(
-                    width: double.infinity,
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        gradient: isDark
-                            ? AppColors.darkBrandGradient
-                            : AppColors.brandGradient,
-                        borderRadius: BorderRadius.circular(18),
-                      ),
-                      child: ElevatedButton.icon(
-                        onPressed: _resetDemoData,
-                        icon: const Icon(Icons.restart_alt_rounded),
-                        label: const Text('Сбросить демо-данные'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.transparent,
-                          shadowColor: Colors.transparent,
-                          foregroundColor: Colors.white,
-                          minimumSize: const Size.fromHeight(54),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(18),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+            child: Icon(
+              method.icon,
+              color: Colors.white,
             ),
-            const SizedBox(height: 12),
-            _card(
-              context,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      const Expanded(
-                        child: Text(
-                          'Способы оплаты',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  method.title,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 16,
+                    color: Theme.of(context).colorScheme.onSurface,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
                       ),
-                      TextButton.icon(
-                        onPressed: () => _showPaymentMethodDialog(),
-                        icon: Icon(
-                          Icons.add_rounded,
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? AppColors.darkSurfaceSoft
+                            : Colors.white,
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(
+                        method.displayBadge,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
                           color: isDark
                               ? AppColors.purpleLight
                               : AppColors.primary,
                         ),
-                        label: Text(
-                          'Добавить',
+                      ),
+                    ),
+                    if (method.isDefault)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: isDark
+                              ? AppColors.darkSurfaceSoft
+                              : Colors.white,
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Text(
+                          'По умолчанию',
                           style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
                             color: isDark
                                 ? AppColors.purpleLight
                                 : AppColors.primary,
                           ),
                         ),
                       ),
-                    ],
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  method.subtitle,
+                  style: TextStyle(
+                    color: isDark
+                        ? AppColors.darkMutedForeground
+                        : AppColors.mutedForeground,
                   ),
-                  const SizedBox(height: 10),
-                  if (paymentMethods.isEmpty)
-                    Text(
-                      'У вас пока нет способов оплаты',
-                      style: TextStyle(
-                        color: isDark
-                            ? AppColors.darkMutedForeground
-                            : AppColors.mutedForeground,
-                      ),
-                    )
-                  else
-                    ...paymentMethods.map((method) {
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 10),
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                          color: isDark
-                              ? AppColors.darkSurfaceElevated
-                              : AppColors.primaryLight.withValues(alpha: 0.35),
+                ),
+              ],
+            ),
+          ),
+          PopupMenuButton<String>(
+            onSelected: (String value) {
+              if (value == 'default') {
+                _setDefaultPaymentMethod(method.id);
+              } else if (value == 'edit') {
+                _showEditCardDialog(method);
+              } else if (value == 'delete') {
+                _deletePaymentMethod(method.id);
+              }
+            },
+            itemBuilder: (BuildContext context) {
+              final List<PopupMenuEntry<String>> items = [
+                const PopupMenuItem(
+                  value: 'default',
+                  child: Text('Сделать основным'),
+                ),
+              ];
+
+              if (method.isCard && !method.isSystem) {
+                items.add(
+                  const PopupMenuItem(
+                    value: 'edit',
+                    child: Text('Редактировать'),
+                  ),
+                );
+                items.add(
+                  const PopupMenuItem(
+                    value: 'delete',
+                    child: Text('Удалить'),
+                  ),
+                );
+              }
+
+              return items;
+            },
+            icon: Icon(
+              Icons.more_vert_rounded,
+              color: isDark
+                  ? AppColors.purpleLight
+                  : AppColors.mutedForeground,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSettingsSection(BuildContext context) {
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Obx(() {
+      final bool notificationsEnabled = _notificationsEnabled();
+      final List<PaymentMethodModel> methods = paymentController.paymentMethods;
+
+      return Column(
+        children: [
+          _card(
+            context,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Настройки приложения',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Уведомления'),
+                  subtitle: Text(
+                    notificationsEnabled
+                        ? 'Все уведомления включены'
+                        : 'Все уведомления выключены',
+                    style: TextStyle(
+                      color: isDark
+                          ? AppColors.darkMutedForeground
+                          : AppColors.mutedForeground,
+                    ),
+                  ),
+                  value: notificationsEnabled,
+                  activeThumbColor:
+                  isDark ? AppColors.purple : AppColors.primary,
+                  onChanged: _toggleAllNotifications,
+                ),
+                const Divider(),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      gradient: isDark
+                          ? AppColors.darkBrandGradient
+                          : AppColors.brandGradient,
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: const Icon(
+                      Icons.notifications_active_rounded,
+                      color: Colors.white,
+                    ),
+                  ),
+                  title: const Text('Проверить уведомления'),
+                  subtitle: Text(
+                    'Показать системное тестовое уведомление',
+                    style: TextStyle(
+                      color: isDark
+                          ? AppColors.darkMutedForeground
+                          : AppColors.mutedForeground,
+                    ),
+                  ),
+                  trailing: Icon(
+                    Icons.chevron_right_rounded,
+                    color: isDark
+                        ? AppColors.purpleLight
+                        : AppColors.mutedForeground,
+                  ),
+                  onTap: _sendTestNotification,
+                ),
+                const Divider(),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Тёмная тема'),
+                  subtitle: Text(
+                    settingsController.darkTheme.value
+                        ? 'Тёмное оформление включено'
+                        : 'Светлое оформление включено',
+                    style: TextStyle(
+                      color: isDark
+                          ? AppColors.darkMutedForeground
+                          : AppColors.mutedForeground,
+                    ),
+                  ),
+                  value: settingsController.darkTheme.value,
+                  activeThumbColor:
+                  isDark ? AppColors.purple : AppColors.primary,
+                  onChanged: (bool val) => settingsController.setDarkTheme(val),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          _card(
+            context,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Демо-режим',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'Сброс вернёт приложение к начальному состоянию для показа на защите.',
+                  style: TextStyle(
+                    color: isDark
+                        ? AppColors.darkMutedForeground
+                        : AppColors.mutedForeground,
+                    height: 1.45,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                SizedBox(
+                  width: double.infinity,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: isDark
+                          ? AppColors.darkBrandGradient
+                          : AppColors.brandGradient,
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                    child: ElevatedButton.icon(
+                      onPressed: _resetDemoData,
+                      icon: const Icon(Icons.restart_alt_rounded),
+                      label: const Text('Сбросить демо-данные'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.transparent,
+                        shadowColor: Colors.transparent,
+                        foregroundColor: Colors.white,
+                        minimumSize: const Size.fromHeight(54),
+                        shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(18),
-                          border: Border.all(
-                            color: isDark
-                                ? AppColors.darkBorder
-                                : Colors.transparent,
-                          ),
                         ),
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 46,
-                              height: 46,
-                              decoration: BoxDecoration(
-                                gradient: isDark
-                                    ? AppColors.darkBrandGradient
-                                    : AppColors.brandGradient,
-                                borderRadius: BorderRadius.circular(14),
-                              ),
-                              child: Icon(
-                                method.icon,
-                                color: Colors.white,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
-                                    children: [
-                                      Flexible(
-                                        child: Text(
-                                          method.title,
-                                          style: TextStyle(
-                                            fontWeight: FontWeight.w700,
-                                            color: Theme.of(context)
-                                                .colorScheme
-                                                .onSurface,
-                                          ),
-                                        ),
-                                      ),
-                                      if (method.isDefault) ...[
-                                        const SizedBox(width: 8),
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 8,
-                                            vertical: 4,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: isDark
-                                                ? AppColors.darkSurfaceSoft
-                                                : Colors.white,
-                                            borderRadius:
-                                            BorderRadius.circular(999),
-                                          ),
-                                          child: Text(
-                                            'По умолчанию',
-                                            style: TextStyle(
-                                              fontSize: 11,
-                                              fontWeight: FontWeight.w700,
-                                              color: isDark
-                                                  ? AppColors.purpleLight
-                                                  : AppColors.primary,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ],
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    method.details,
-                                    style: TextStyle(
-                                      color: isDark
-                                          ? AppColors.darkMutedForeground
-                                          : AppColors.mutedForeground,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            PopupMenuButton<String>(
-                              onSelected: (String value) {
-                                if (value == 'default') {
-                                  _setDefaultPaymentMethod(method.id);
-                                } else if (value == 'edit') {
-                                  _showPaymentMethodDialog(method: method);
-                                } else if (value == 'delete') {
-                                  _deletePaymentMethod(method.id);
-                                }
-                              },
-                              itemBuilder: (BuildContext context) => [
-                                const PopupMenuItem(
-                                  value: 'default',
-                                  child: Text('Сделать основным'),
-                                ),
-                                const PopupMenuItem(
-                                  value: 'edit',
-                                  child: Text('Редактировать'),
-                                ),
-                                const PopupMenuItem(
-                                  value: 'delete',
-                                  child: Text('Удалить'),
-                                ),
-                              ],
-                              icon: Icon(
-                                Icons.more_vert_rounded,
-                                color: isDark
-                                    ? AppColors.purpleLight
-                                    : AppColors.mutedForeground,
-                              ),
-                            ),
-                          ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          _card(
+            context,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Expanded(
+                      child: Text(
+                        'Способы оплаты',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
                         ),
-                      );
-                    }),
-                ],
+                      ),
+                    ),
+                    TextButton.icon(
+                      onPressed: _showAddCardDialog,
+                      icon: Icon(
+                        Icons.add_rounded,
+                        color: isDark
+                            ? AppColors.purpleLight
+                            : AppColors.primary,
+                      ),
+                      label: Text(
+                        'Добавить карту',
+                        style: TextStyle(
+                          color: isDark
+                              ? AppColors.purpleLight
+                              : AppColors.primary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  'Сохранённые методы оплаты используются при оформлении заказа. Полные реквизиты карты и CVV не хранятся.',
+                  style: TextStyle(
+                    color: isDark
+                        ? AppColors.darkMutedForeground
+                        : AppColors.mutedForeground,
+                    height: 1.4,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                if (methods.isEmpty)
+                  Text(
+                    'У вас пока нет способов оплаты',
+                    style: TextStyle(
+                      color: isDark
+                          ? AppColors.darkMutedForeground
+                          : AppColors.mutedForeground,
+                    ),
+                  )
+                else
+                  ...methods.map((method) => _buildPaymentMethodTile(context, method)),
+              ],
+            ),
+          ),
+        ],
+      );
+    });
+  }
+
+  Widget _buildProfileActions(BuildContext context, bool isDark) {
+    if (!isEditing) {
+      return Align(
+        alignment: Alignment.centerRight,
+        child: TextButton.icon(
+          onPressed: _startEditing,
+          icon: Icon(
+            Icons.edit_outlined,
+            size: 18,
+            color: isDark ? AppColors.purpleLight : AppColors.primary,
+          ),
+          label: Text(
+            'Редактировать',
+            style: TextStyle(
+              color: isDark ? AppColors.purpleLight : AppColors.primary,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          style: TextButton.styleFrom(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return Row(
+      children: [
+        Expanded(
+          child: OutlinedButton(
+            onPressed: handleCancel,
+            style: OutlinedButton.styleFrom(
+              foregroundColor:
+              isDark ? AppColors.purpleLight : AppColors.primary,
+              side: BorderSide(
+                color: isDark ? AppColors.darkBorder : AppColors.border,
+              ),
+              minimumSize: const Size.fromHeight(46),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
               ),
             ),
-          ],
-        );
-      },
+            child: const Text('Отмена'),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: isDark
+                  ? AppColors.darkBrandGradient
+                  : AppColors.brandGradient,
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: ElevatedButton(
+              onPressed: handleSave,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.transparent,
+                shadowColor: Colors.transparent,
+                foregroundColor: Colors.white,
+                minimumSize: const Size.fromHeight(46),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+              child: const Text('Сохранить'),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -1080,104 +1030,51 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return _card(
       context,
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'Личные данные',
-                style: TextStyle(
-                  fontWeight: FontWeight.w800,
-                  fontSize: 18,
-                ),
-              ),
-              !isEditing
-                  ? TextButton.icon(
-                onPressed: () => setState(() => isEditing = true),
-                icon: Icon(
-                  Icons.edit_outlined,
-                  size: 16,
-                  color: isDark
-                      ? AppColors.purpleLight
-                      : AppColors.primary,
-                ),
-                label: Text(
-                  'Редактировать',
-                  style: TextStyle(
-                    color: isDark
-                        ? AppColors.purpleLight
-                        : AppColors.primary,
-                  ),
-                ),
-              )
-                  : Row(
-                children: [
-                  OutlinedButton(
-                    onPressed: handleCancel,
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: isDark
-                          ? AppColors.purpleLight
-                          : AppColors.primary,
-                      side: BorderSide(
-                        color: isDark
-                            ? AppColors.darkBorder
-                            : AppColors.border,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                    ),
-                    child: const Text('Отмена'),
-                  ),
-                  const SizedBox(width: 8),
-                  DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: isDark
-                          ? AppColors.darkBrandGradient
-                          : AppColors.brandGradient,
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: ElevatedButton(
-                      onPressed: handleSave,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.transparent,
-                        shadowColor: Colors.transparent,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                      ),
-                      child: const Text('Сохранить'),
-                    ),
-                  ),
-                ],
-              ),
-            ],
+          const Text(
+            'Личные данные',
+            style: TextStyle(
+              fontWeight: FontWeight.w800,
+              fontSize: 20,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Редактируйте основные данные профиля',
+            style: TextStyle(
+              fontSize: 13,
+              color: isDark
+                  ? AppColors.darkMutedForeground
+                  : AppColors.mutedForeground,
+            ),
           ),
           const SizedBox(height: 14),
+          _buildProfileActions(context, isDark),
+          const SizedBox(height: 16),
           _inputField(
             context,
             'Имя',
             nameController,
-                (String val) => editedUser = editedUser!.copyWith(name: val),
+                (String val) => editedUser = editedUser?.copyWith(name: val),
           ),
           _inputField(
             context,
             'Email',
             emailController,
-                (String val) => editedUser = editedUser!.copyWith(email: val),
+                (String val) => editedUser = editedUser?.copyWith(email: val),
           ),
           _inputField(
             context,
             'Телефон',
             phoneController,
-                (String val) => editedUser = editedUser!.copyWith(phone: val),
+                (String val) => editedUser = editedUser?.copyWith(phone: val),
           ),
           _inputField(
             context,
             'Адрес доставки',
             addressController,
-                (String val) => editedUser = editedUser!.copyWith(address: val),
+                (String val) => editedUser = editedUser?.copyWith(address: val),
           ),
         ],
       ),
@@ -1335,7 +1232,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         shape: BoxShape.circle,
                         boxShadow: [
                           BoxShadow(
-                            color: (isDark ? AppColors.purple : AppColors.primary)
+                            color:
+                            (isDark ? AppColors.purple : AppColors.primary)
                                 .withValues(alpha: 0.18),
                             blurRadius: 16,
                             offset: const Offset(0, 8),
@@ -1347,6 +1245,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           user.name.isNotEmpty
                               ? user.name
                               .split(' ')
+                              .where((String n) => n.isNotEmpty)
                               .map((String n) => n[0])
                               .join()
                               .toUpperCase()
@@ -1448,6 +1347,561 @@ class _ProfileScreenState extends State<ProfileScreen> {
               if (activeSection == 'settings') _buildSettingsSection(context),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class PaymentCardFormResult {
+  final String cardNumber;
+  final String expiryMonth;
+  final String expiryYear;
+  final String cvv;
+  final bool setAsDefault;
+
+  const PaymentCardFormResult({
+    required this.cardNumber,
+    required this.expiryMonth,
+    required this.expiryYear,
+    required this.cvv,
+    required this.setAsDefault,
+  });
+}
+
+class _PaymentCardBottomSheet extends StatefulWidget {
+  final PaymentMethodModel? method;
+
+  const _PaymentCardBottomSheet({
+    this.method,
+  });
+
+  @override
+  State<_PaymentCardBottomSheet> createState() => _PaymentCardBottomSheetState();
+}
+
+class _PaymentCardBottomSheetState extends State<_PaymentCardBottomSheet> {
+  late final TextEditingController cardNumberController;
+  late final TextEditingController monthController;
+  late final TextEditingController yearController;
+  late final TextEditingController cvvController;
+
+  bool setAsDefault = false;
+
+  bool get isEdit => widget.method != null;
+
+  @override
+  void initState() {
+    super.initState();
+
+    cardNumberController =
+        TextEditingController(text: widget.method?.maskedNumber ?? '');
+    monthController =
+        TextEditingController(text: widget.method?.expiryMonth ?? '');
+    yearController =
+        TextEditingController(text: widget.method?.expiryYear ?? '');
+    cvvController = TextEditingController();
+    setAsDefault = widget.method?.isDefault ?? false;
+  }
+
+  @override
+  void dispose() {
+    FocusManager.instance.primaryFocus?.unfocus();
+    cardNumberController.dispose();
+    monthController.dispose();
+    yearController.dispose();
+    cvvController.dispose();
+    super.dispose();
+  }
+
+  String _digitsOnly(String value) => value.replaceAll(RegExp(r'[^0-9]'), '');
+
+  String _formatCardNumber(String value) {
+    final String digits = _digitsOnly(value);
+    final String limited = digits.length > 16 ? digits.substring(0, 16) : digits;
+
+    final List<String> chunks = <String>[];
+    for (int i = 0; i < limited.length; i += 4) {
+      final int end = (i + 4 < limited.length) ? i + 4 : limited.length;
+      chunks.add(limited.substring(i, end));
+    }
+
+    return chunks.join(' ');
+  }
+
+  void _submit() {
+    final String cardNumber = cardNumberController.text.trim();
+    final String expiryMonth = monthController.text.trim();
+    final String expiryYear = yearController.text.trim();
+    final String cvv = cvvController.text.trim();
+
+    if (!isEdit) {
+      final String digits = _digitsOnly(cardNumber);
+      if (digits.length != 16) {
+        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+          const SnackBar(content: Text('Номер карты должен содержать 16 цифр')),
+        );
+        return;
+      }
+    }
+
+    final int? month = int.tryParse(expiryMonth);
+    if (month == null || month < 1 || month > 12) {
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        const SnackBar(content: Text('Введите корректный месяц')),
+      );
+      return;
+    }
+
+    final String normalizedYear = _digitsOnly(expiryYear);
+    if (normalizedYear.length != 2) {
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        const SnackBar(content: Text('Введите год в формате ГГ')),
+      );
+      return;
+    }
+
+    if (cvv.length != 3 || int.tryParse(cvv) == null) {
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        const SnackBar(content: Text('CVV должен содержать 3 цифры')),
+      );
+      return;
+    }
+
+    FocusScope.of(context).unfocus();
+
+    Navigator.of(context).pop(
+      PaymentCardFormResult(
+        cardNumber: cardNumber,
+        expiryMonth: expiryMonth.padLeft(2, '0'),
+        expiryYear: normalizedYear,
+        cvv: cvv,
+        setAsDefault: setAsDefault,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        20,
+        20,
+        20,
+        MediaQuery.of(context).viewInsets.bottom + 20,
+      ),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              isEdit ? 'Редактировать карту' : 'Добавить карту',
+              style: const TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 18),
+            TextField(
+              controller: cardNumberController,
+              enabled: !isEdit,
+              keyboardType: TextInputType.number,
+              textInputAction: TextInputAction.next,
+              onChanged: isEdit
+                  ? null
+                  : (String value) {
+                final String formatted = _formatCardNumber(value);
+                if (formatted != value) {
+                  cardNumberController.value = TextEditingValue(
+                    text: formatted,
+                    selection: TextSelection.collapsed(
+                      offset: formatted.length,
+                    ),
+                  );
+                }
+              },
+              decoration: InputDecoration(
+                labelText: 'Номер карты',
+                hintText: '0000 0000 0000 0000',
+                helperText: isEdit
+                    ? 'Полный номер карты повторно не хранится'
+                    : 'Сохраняется только маска карты',
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: monthController,
+                    keyboardType: TextInputType.number,
+                    textInputAction: TextInputAction.next,
+                    decoration: const InputDecoration(
+                      labelText: 'Месяц',
+                      hintText: 'MM',
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: TextField(
+                    controller: yearController,
+                    keyboardType: TextInputType.number,
+                    textInputAction: TextInputAction.next,
+                    decoration: const InputDecoration(
+                      labelText: 'Год',
+                      hintText: 'ГГ',
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: cvvController,
+              keyboardType: TextInputType.number,
+              obscureText: true,
+              textInputAction: TextInputAction.done,
+              onSubmitted: (_) => _submit(),
+              decoration: const InputDecoration(
+                labelText: 'CVV/CVC',
+                hintText: '123',
+              ),
+            ),
+            const SizedBox(height: 10),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Сделать способом по умолчанию'),
+              value: setAsDefault,
+              activeThumbColor: isDark ? AppColors.purple : AppColors.primary,
+              onChanged: (bool value) {
+                FocusScope.of(context).unfocus();
+                setState(() {
+                  setAsDefault = value;
+                });
+              },
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'CVV не сохраняется. После добавления карты в приложении хранится только маска карты, срок действия и локальный токен.',
+              style: TextStyle(
+                fontSize: 12,
+                height: 1.4,
+                color: isDark
+                    ? AppColors.darkMutedForeground
+                    : AppColors.mutedForeground,
+              ),
+            ),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: isDark
+                      ? AppColors.darkBrandGradient
+                      : AppColors.brandGradient,
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                child: ElevatedButton(
+                  onPressed: _submit,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.transparent,
+                    shadowColor: Colors.transparent,
+                    foregroundColor: Colors.white,
+                    minimumSize: const Size.fromHeight(54),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                  ),
+                  child: Text(isEdit ? 'Сохранить' : 'Добавить'),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PaymentCardBottomSheetState extends State<_PaymentCardBottomSheet> {
+  late final TextEditingController titleController;
+  late final TextEditingController holderController;
+  late final TextEditingController cardNumberController;
+  late final TextEditingController monthController;
+  late final TextEditingController yearController;
+  late final TextEditingController bankController;
+
+  bool setAsDefault = false;
+
+  bool get isEdit => widget.method != null;
+
+  @override
+  void initState() {
+    super.initState();
+
+    titleController = TextEditingController(text: widget.method?.title ?? '');
+    holderController =
+        TextEditingController(text: widget.method?.holderName ?? '');
+    cardNumberController =
+        TextEditingController(text: widget.method?.maskedNumber ?? '');
+    monthController =
+        TextEditingController(text: widget.method?.expiryMonth ?? '');
+    yearController = TextEditingController(text: widget.method?.expiryYear ?? '');
+    bankController = TextEditingController(text: widget.method?.bankName ?? '');
+    setAsDefault = widget.method?.isDefault ?? false;
+  }
+
+  @override
+  void dispose() {
+    FocusManager.instance.primaryFocus?.unfocus();
+    titleController.dispose();
+    holderController.dispose();
+    cardNumberController.dispose();
+    monthController.dispose();
+    yearController.dispose();
+    bankController.dispose();
+    super.dispose();
+  }
+
+  String _digitsOnly(String value) => value.replaceAll(RegExp(r'[^0-9]'), '');
+
+  String _formatCardNumber(String value) {
+    final String digits = _digitsOnly(value);
+    final String limited = digits.length > 16 ? digits.substring(0, 16) : digits;
+
+    final List<String> chunks = <String>[];
+    for (int i = 0; i < limited.length; i += 4) {
+      final int end = (i + 4 < limited.length) ? i + 4 : limited.length;
+      chunks.add(limited.substring(i, end));
+    }
+
+    return chunks.join(' ');
+  }
+
+  void _submit() {
+    final String title = titleController.text.trim();
+    final String holderName = holderController.text.trim();
+    final String cardNumber = cardNumberController.text.trim();
+    final String expiryMonth = monthController.text.trim();
+    final String expiryYear = yearController.text.trim();
+    final String bankName = bankController.text.trim();
+
+    if (title.isEmpty) {
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        const SnackBar(content: Text('Введите название карты')),
+      );
+      return;
+    }
+
+    if (holderName.isEmpty) {
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        const SnackBar(content: Text('Введите имя держателя карты')),
+      );
+      return;
+    }
+
+    if (!isEdit) {
+      final String digits = _digitsOnly(cardNumber);
+      if (digits.length != 16) {
+        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+          const SnackBar(content: Text('Номер карты должен содержать 16 цифр')),
+        );
+        return;
+      }
+    }
+
+    final int? month = int.tryParse(expiryMonth);
+    if (month == null || month < 1 || month > 12) {
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        const SnackBar(content: Text('Введите корректный месяц')),
+      );
+      return;
+    }
+
+    final String normalizedYear = _digitsOnly(expiryYear);
+    if (normalizedYear.length != 2) {
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        const SnackBar(content: Text('Введите год в формате ГГ')),
+      );
+      return;
+    }
+
+    FocusScope.of(context).unfocus();
+
+    Navigator.of(context).pop(
+      PaymentCardFormResult(
+        title: title,
+        holderName: holderName,
+        cardNumber: cardNumber,
+        expiryMonth: expiryMonth.padLeft(2, '0'),
+        expiryYear: normalizedYear,
+        bankName: bankName.isEmpty ? null : bankName,
+        setAsDefault: setAsDefault,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        20,
+        20,
+        20,
+        MediaQuery.of(context).viewInsets.bottom + 20,
+      ),
+      child: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              isEdit ? 'Редактировать карту' : 'Добавить карту',
+              style: const TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 18),
+            TextField(
+              controller: titleController,
+              textInputAction: TextInputAction.next,
+              decoration: const InputDecoration(
+                labelText: 'Название',
+                hintText: 'Например, Личная карта',
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: holderController,
+              textCapitalization: TextCapitalization.characters,
+              textInputAction: TextInputAction.next,
+              decoration: const InputDecoration(
+                labelText: 'Держатель карты',
+                hintText: 'IVAN IVANOV',
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: cardNumberController,
+              enabled: !isEdit,
+              keyboardType: TextInputType.number,
+              textInputAction: TextInputAction.next,
+              onChanged: isEdit
+                  ? null
+                  : (String value) {
+                final String formatted = _formatCardNumber(value);
+                if (formatted != value) {
+                  cardNumberController.value = TextEditingValue(
+                    text: formatted,
+                    selection: TextSelection.collapsed(
+                      offset: formatted.length,
+                    ),
+                  );
+                }
+              },
+              decoration: InputDecoration(
+                labelText: 'Номер карты',
+                hintText: '0000 0000 0000 0000',
+                helperText: isEdit
+                    ? 'Полный номер карты повторно не хранится'
+                    : 'Сохраняется только маска и токен',
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: monthController,
+                    keyboardType: TextInputType.number,
+                    textInputAction: TextInputAction.next,
+                    decoration: const InputDecoration(
+                      labelText: 'Месяц',
+                      hintText: 'MM',
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: TextField(
+                    controller: yearController,
+                    keyboardType: TextInputType.number,
+                    textInputAction: TextInputAction.next,
+                    decoration: const InputDecoration(
+                      labelText: 'Год',
+                      hintText: 'ГГ',
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: bankController,
+              textInputAction: TextInputAction.done,
+              onSubmitted: (_) => _submit(),
+              decoration: const InputDecoration(
+                labelText: 'Банк',
+                hintText: 'Например, Kaspi / Halyk',
+              ),
+            ),
+            const SizedBox(height: 10),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Сделать способом по умолчанию'),
+              value: setAsDefault,
+              activeThumbColor: isDark ? AppColors.purple : AppColors.primary,
+              onChanged: (bool value) {
+                FocusScope.of(context).unfocus();
+                setState(() {
+                  setAsDefault = value;
+                });
+              },
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'CVV и полный номер карты не сохраняются. Для демонстрации хранится только маска карты и локальный токен.',
+              style: TextStyle(
+                fontSize: 12,
+                height: 1.4,
+                color: isDark
+                    ? AppColors.darkMutedForeground
+                    : AppColors.mutedForeground,
+              ),
+            ),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: isDark
+                      ? AppColors.darkBrandGradient
+                      : AppColors.brandGradient,
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                child: ElevatedButton(
+                  onPressed: _submit,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.transparent,
+                    shadowColor: Colors.transparent,
+                    foregroundColor: Colors.white,
+                    minimumSize: const Size.fromHeight(54),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                  ),
+                  child: Text(isEdit ? 'Сохранить' : 'Добавить'),
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

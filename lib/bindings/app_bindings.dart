@@ -5,14 +5,21 @@ import '../controllers/auth_controller.dart';
 import '../controllers/cart_controller.dart';
 import '../controllers/favorites_controller.dart';
 import '../controllers/order_controller.dart';
+import '../controllers/payment_controller.dart';
 import '../controllers/settings_controller.dart';
 
 class AppBindings extends Bindings {
   @override
   void dependencies() {
+    Get.put<SettingsController>(
+      SettingsController(),
+      permanent: true,
+    );
 
-    Get.put<SettingsController>(SettingsController(), permanent: true);
-    Get.put<AuthController>(AuthController(), permanent: true);
+    Get.put<AuthController>(
+      AuthController(),
+      permanent: true,
+    );
 
     final AuthController authController = Get.find<AuthController>();
 
@@ -28,6 +35,11 @@ class AppBindings extends Bindings {
 
     Get.put<OrderController>(
       OrderController(authController: authController),
+      permanent: true,
+    );
+
+    Get.put<PaymentController>(
+      PaymentController(authController: authController),
       permanent: true,
     );
 

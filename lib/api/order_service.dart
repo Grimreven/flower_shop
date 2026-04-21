@@ -26,4 +26,15 @@ class OrderService {
 
     return rawOrders.map((e) => OrderModel.fromJson(e)).toList();
   }
+
+  Future<void> updateOrderStatus(
+      int orderId,
+      String status,
+      ) async {
+    await _localDemoService.updateOrderStatus(
+      token,
+      orderId,
+      status,
+    );
+  }
 }

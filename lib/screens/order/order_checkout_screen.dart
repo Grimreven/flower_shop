@@ -5,24 +5,15 @@ import '../../controllers/address_book_controller.dart';
 import '../../controllers/auth_controller.dart';
 import '../../controllers/cart_controller.dart';
 import '../../controllers/order_controller.dart';
+import '../../controllers/payment_controller.dart';
 import '../../models/cart_item.dart' as model;
 import '../../models/checkout_summary.dart';
 import '../../models/delivery_method.dart';
+import '../../models/payment_method_model.dart';
+import '../../models/payment_transaction_model.dart';
 import '../../models/user_address.dart';
 import '../../utils/app_colors.dart';
 import 'order_success_screen.dart';
-
-enum CheckoutPaymentMethod {
-  cash,
-  sbp,
-  cardOnline,
-}
-
-enum CheckoutPaymentStatus {
-  pending,
-  paid,
-  failed,
-}
 
 class OrderCheckoutScreen extends StatefulWidget {
   const OrderCheckoutScreen({super.key});
@@ -35,40 +26,40 @@ class _OrderCheckoutScreenState extends State<OrderCheckoutScreen> {
   final CartController cartController = Get.find<CartController>();
   final AuthController authController = Get.find<AuthController>();
   final OrderController orderController = Get.find<OrderController>();
+  final PaymentController paymentController = Get.find<PaymentController>();
   final AddressBookController addressBookController =
   Get.find<AddressBookController>();
 
   final TextEditingController promoController = TextEditingController();
   final TextEditingController recipientCommentController =
   TextEditingController();
+  final TextEditingController cvvController = TextEditingController();
 
-  final TextEditingController cardHolderController = TextEditingController();
-  final TextEditingController cardNumberController = TextEditingController();
-  final TextEditingController cardExpiryController = TextEditingController();
-  final TextEditingController cardCvvController = TextEditingController();
-
-  CheckoutPaymentMethod paymentMethod = CheckoutPaymentMethod.cash;
-  CheckoutPaymentStatus paymentStatus = CheckoutPaymentStatus.pending;
   DeliveryMethod deliveryMethod = DeliveryMethod.delivery;
-
   int bonusToUse = 0;
-  bool isProcessingPayment = false;
 
   @override
   void initState() {
     super.initState();
     addressBookController.syncPrimaryFromProfileIfNeeded();
+    paymentController.loadPaymentMethods();
+    paymentController.loadPaymentTransactions();
   }
 
   @override
   void dispose() {
+    FocusManager.instance.primaryFocus?.unfocus();
     promoController.dispose();
     recipientCommentController.dispose();
-    cardHolderController.dispose();
-    cardNumberController.dispose();
-    cardExpiryController.dispose();
-    cardCvvController.dispose();
+    cvvController.dispose();
     super.dispose();
+  }
+
+  void _unfocusEverything() {
+    final FocusScopeNode scope = FocusScope.of(context);
+    if (!scope.hasPrimaryFocus) {
+      scope.unfocus();
+    }
   }
 
   CheckoutSummary _buildSummary() {
@@ -84,161 +75,40 @@ class _OrderCheckoutScreenState extends State<OrderCheckoutScreen> {
 
   bool get _canCheckout => cartController.items.isNotEmpty;
 
-  String get _paymentMethodLabel {
-    switch (paymentMethod) {
-      case CheckoutPaymentMethod.cash:
-        return 'Наличными при получении';
-      case CheckoutPaymentMethod.sbp:
-        return 'СБП';
-      case CheckoutPaymentMethod.cardOnline:
-        return 'Банковская карта';
+  PaymentMethodModel? get _selectedMethod => paymentController.selectedMethod.value;
+
+  bool get _selectedMethodRequiresCvv =>
+      _selectedMethod != null && _selectedMethod!.type == PaymentMethodType.bankCard;
+
+  String get _selectedMethodLabel {
+    final PaymentMethodModel? method = _selectedMethod;
+    if (method == null) {
+      return 'Не выбран';
     }
+    return method.title;
   }
 
-  String get _paymentStatusLabel {
-    switch (paymentStatus) {
-      case CheckoutPaymentStatus.pending:
-        return paymentMethod == CheckoutPaymentMethod.cash
-            ? 'Ожидает оплаты при получении'
-            : 'Ожидает подтверждения';
-      case CheckoutPaymentStatus.paid:
-        return 'Оплачено';
-      case CheckoutPaymentStatus.failed:
-        return 'Ошибка оплаты';
-    }
-  }
-
-  bool get _requiresCardFields =>
-      paymentMethod == CheckoutPaymentMethod.cardOnline ||
-          paymentMethod == CheckoutPaymentMethod.sbp;
-
-  String _digitsOnly(String value) => value.replaceAll(RegExp(r'[^0-9]'), '');
-
-  String _formatCardNumber(String value) {
-    final String digits = _digitsOnly(value);
-    final List<String> chunks = <String>[];
-    for (int i = 0; i < digits.length; i += 4) {
-      final int end = (i + 4 < digits.length) ? i + 4 : digits.length;
-      chunks.add(digits.substring(i, end));
-    }
-    return chunks.join(' ');
-  }
-
-  String _formatExpiry(String value) {
-    final String digits = _digitsOnly(value);
-    if (digits.length <= 2) return digits;
-    final String month = digits.substring(0, 2);
-    final String year = digits.substring(2, digits.length > 4 ? 4 : digits.length);
-    return '$month/$year';
-  }
-
-  String _maskedCardNumber() {
-    final String digits = _digitsOnly(cardNumberController.text);
-    if (digits.length < 4) return '';
-    return '**** **** **** ${digits.substring(digits.length - 4)}';
-  }
-
-  String? _validateCardHolder() {
-    if (!_requiresCardFields) return null;
-
-    final String value = cardHolderController.text.trim();
-    if (value.isEmpty) return 'Введите имя держателя карты';
-    if (value.length < 4) return 'Слишком короткое имя держателя';
-    return null;
-  }
-
-  String? _validateCardNumber() {
-    if (!_requiresCardFields) return null;
-
-    final String digits = _digitsOnly(cardNumberController.text);
-    if (digits.isEmpty) return 'Введите номер карты';
-    if (digits.length < 16) return 'Номер карты должен содержать 16 цифр';
-    return null;
-  }
-
-  String? _validateExpiry() {
-    if (!_requiresCardFields) return null;
-
-    final String digits = _digitsOnly(cardExpiryController.text);
-    if (digits.length != 4) return 'Введите срок действия в формате ММ/ГГ';
-
-    final int month = int.tryParse(digits.substring(0, 2)) ?? 0;
-    final int year = int.tryParse(digits.substring(2, 4)) ?? 0;
-
-    if (month < 1 || month > 12) {
-      return 'Некорректный месяц';
+  String get _predictedPaymentStatusLabel {
+    final PaymentMethodModel? method = _selectedMethod;
+    if (method == null) {
+      return 'Не выбран';
     }
 
-    final DateTime now = DateTime.now();
-    final int currentYear = now.year % 100;
-    final int currentMonth = now.month;
-
-    if (year < currentYear || (year == currentYear && month < currentMonth)) {
-      return 'Срок действия карты истёк';
+    if (method.type == PaymentMethodType.cash) {
+      return 'Ожидает оплаты при получении';
     }
 
-    return null;
+    return 'Ожидает подтверждения';
   }
 
-  String? _validateCvv() {
-    if (!_requiresCardFields) return null;
-
-    final String digits = _digitsOnly(cardCvvController.text);
-    if (digits.length != 3) return 'CVV должен содержать 3 цифры';
-    return null;
+  String _transactionStatusLabel(PaymentTransactionModel transaction) {
+    return transaction.statusLabel;
   }
 
-  bool _validatePaymentForm() {
-    final String? holderError = _validateCardHolder();
-    final String? numberError = _validateCardNumber();
-    final String? expiryError = _validateExpiry();
-    final String? cvvError = _validateCvv();
-
-    final String? firstError =
-        holderError ?? numberError ?? expiryError ?? cvvError;
-
-    if (firstError != null) {
-      Get.snackbar('Ошибка', firstError);
-      return false;
-    }
-
-    return true;
-  }
-
-  Future<bool> _simulatePayment() async {
-    if (paymentMethod == CheckoutPaymentMethod.cash) {
-      setState(() {
-        paymentStatus = CheckoutPaymentStatus.pending;
-      });
-      return true;
-    }
-
-    if (!_validatePaymentForm()) {
-      setState(() {
-        paymentStatus = CheckoutPaymentStatus.failed;
-      });
-      return false;
-    }
-
-    setState(() {
-      isProcessingPayment = true;
-      paymentStatus = CheckoutPaymentStatus.pending;
-    });
-
-    await Future.delayed(const Duration(seconds: 2));
-
-    setState(() {
-      isProcessingPayment = false;
-      paymentStatus = CheckoutPaymentStatus.paid;
-    });
-
-    return true;
-  }
-
-  Future<void> _confirmOrder() async {
+  bool _validateCheckoutData() {
     if (!_canCheckout) {
       Get.snackbar('Ошибка', 'Корзина пуста');
-      return;
+      return false;
     }
 
     if (!authController.isLoggedIn) {
@@ -246,27 +116,54 @@ class _OrderCheckoutScreenState extends State<OrderCheckoutScreen> {
         'Вход',
         'Пожалуйста, войдите в аккаунт для оформления заказа',
       );
+      return false;
+    }
+
+    if (_selectedMethod == null) {
+      Get.snackbar(
+        'Оплата',
+        'Выберите способ оплаты',
+      );
+      return false;
+    }
+
+    if (deliveryMethod == DeliveryMethod.delivery &&
+        addressBookController.selectedAddress == null) {
+      Get.snackbar(
+        'Адрес',
+        'Выберите адрес доставки',
+      );
+      return false;
+    }
+
+    if (_selectedMethodRequiresCvv) {
+      final String cvv = cvvController.text.trim();
+      if (cvv.length != 3 || int.tryParse(cvv) == null) {
+        Get.snackbar(
+          'Оплата',
+          'Введите корректный CVV из 3 цифр',
+        );
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  Future<void> _confirmOrder() async {
+    _unfocusEverything();
+
+    if (!_validateCheckoutData()) {
       return;
     }
 
-    final UserAddress? selectedAddress = addressBookController.selectedAddress;
+    final PaymentMethodModel method = _selectedMethod!;
+    final CheckoutSummary summary = _buildSummary();
 
+    final UserAddress? selectedAddress = addressBookController.selectedAddress;
     final String deliveryAddress = deliveryMethod == DeliveryMethod.pickup
         ? 'Самовывоз'
         : (selectedAddress?.fullAddress.trim() ?? '');
-
-    if (deliveryMethod == DeliveryMethod.delivery &&
-        deliveryAddress.trim().isEmpty) {
-      Get.snackbar('Ошибка', 'Выберите адрес доставки');
-      return;
-    }
-
-    final bool paymentOk = await _simulatePayment();
-    if (!paymentOk) {
-      return;
-    }
-
-    final CheckoutSummary summary = _buildSummary();
 
     try {
       final List<model.CartItem> items = cartController.items
@@ -281,16 +178,52 @@ class _OrderCheckoutScreenState extends State<OrderCheckoutScreen> {
       await orderController.createOrder(
         items,
         summary: summary,
-        paymentMethod: _paymentMethodLabel,
-        paymentStatus: _paymentStatusLabel,
-        cardMask: _maskedCardNumber(),
+        paymentMethod: method.title,
+        paymentStatus: _predictedPaymentStatusLabel,
+        cardMask: method.maskedNumber ?? '',
         deliveryAddress: deliveryAddress,
         recipientComment: recipientCommentController.text.trim(),
         promoCode: promoController.text.trim(),
       );
 
-      Get.offAll(() => const OrderSuccessScreen());
+      final latestOrder = orderController.getLatestOrder();
+      if (latestOrder == null) {
+        throw Exception('Не удалось создать заказ');
+      }
+
+      final PaymentTransactionModel transaction =
+      await paymentController.processOrderPayment(
+        orderId: latestOrder.id,
+        amount: latestOrder.total,
+        method: method,
+        cvv: _selectedMethodRequiresCvv ? cvvController.text.trim() : null,
+      );
+
+      if (!mounted) return;
+
+      if (transaction.status == PaymentTransactionStatus.failed) {
+        Get.snackbar(
+          'Оплата не прошла',
+          transaction.failureReason ?? 'Не удалось выполнить платёж',
+          backgroundColor: Colors.redAccent,
+          colorText: Colors.white,
+        );
+        return;
+      }
+
+      final String paymentText = _transactionStatusLabel(transaction);
+
+      Get.offAll(
+            () => const OrderSuccessScreen(),
+        arguments: <String, dynamic>{
+          'payment_status_label': paymentText,
+          'payment_method_title': method.title,
+          'payment_method_subtitle': method.subtitle,
+        },
+      );
     } catch (e) {
+      if (!mounted) return;
+
       Get.snackbar(
         'Ошибка',
         'Не удалось оформить заказ: $e',
@@ -353,15 +286,18 @@ class _OrderCheckoutScreenState extends State<OrderCheckoutScreen> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(
-          title,
-          style: TextStyle(
-            color: isDark
-                ? AppColors.darkMutedForeground
-                : AppColors.mutedForeground,
-            fontWeight: FontWeight.w500,
+        Expanded(
+          child: Text(
+            title,
+            style: TextStyle(
+              color: isDark
+                  ? AppColors.darkMutedForeground
+                  : AppColors.mutedForeground,
+              fontWeight: FontWeight.w500,
+            ),
           ),
         ),
+        const SizedBox(width: 12),
         Text(
           value,
           style: TextStyle(
@@ -375,217 +311,6 @@ class _OrderCheckoutScreenState extends State<OrderCheckoutScreen> {
     );
   }
 
-  Widget _paymentMethodTile({
-    required BuildContext context,
-    required CheckoutPaymentMethod value,
-    required String title,
-    required String subtitle,
-    required IconData icon,
-  }) {
-    final bool isDark = Theme.of(context).brightness == Brightness.dark;
-    final Color onSurface = Theme.of(context).colorScheme.onSurface;
-    final bool selected = paymentMethod == value;
-
-    return InkWell(
-      onTap: () {
-        setState(() {
-          paymentMethod = value;
-          if (paymentMethod == CheckoutPaymentMethod.cash) {
-            paymentStatus = CheckoutPaymentStatus.pending;
-          }
-        });
-      },
-      borderRadius: BorderRadius.circular(18),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: selected
-              ? (isDark ? AppColors.darkSurfaceElevated : AppColors.primaryLight)
-              : Theme.of(context).colorScheme.surface,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(
-            color: selected
-                ? (isDark ? AppColors.purpleLight : AppColors.primary)
-                : (isDark ? AppColors.darkBorder : AppColors.border),
-            width: selected ? 1.4 : 1,
-          ),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 42,
-              height: 42,
-              decoration: BoxDecoration(
-                color: selected
-                    ? (isDark
-                    ? AppColors.purple.withOpacity(0.18)
-                    : AppColors.primary.withOpacity(0.10))
-                    : (isDark ? AppColors.darkSurfaceSoft : AppColors.primaryLight),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(
-                icon,
-                color: selected
-                    ? (isDark ? AppColors.purpleLight : AppColors.primary)
-                    : (isDark
-                    ? AppColors.darkMutedForeground
-                    : AppColors.mutedForeground),
-              ),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                      color: onSurface,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    subtitle,
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: isDark
-                          ? AppColors.darkMutedForeground
-                          : AppColors.mutedForeground,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Radio<CheckoutPaymentMethod>(
-              value: value,
-              groupValue: paymentMethod,
-              onChanged: (CheckoutPaymentMethod? newValue) {
-                if (newValue == null) return;
-                setState(() {
-                  paymentMethod = newValue;
-                  if (paymentMethod == CheckoutPaymentMethod.cash) {
-                    paymentStatus = CheckoutPaymentStatus.pending;
-                  }
-                });
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildCardFields(BuildContext context) {
-    if (!_requiresCardFields) {
-      return const SizedBox.shrink();
-    }
-
-    final bool isDark = Theme.of(context).brightness == Brightness.dark;
-    final Color muted = isDark
-        ? AppColors.darkMutedForeground
-        : AppColors.mutedForeground;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SizedBox(height: 16),
-        TextField(
-          controller: cardHolderController,
-          textCapitalization: TextCapitalization.characters,
-          decoration: const InputDecoration(
-            labelText: 'Имя держателя карты',
-            hintText: 'IVAN IVANOV',
-          ),
-        ),
-        const SizedBox(height: 12),
-        TextField(
-          controller: cardNumberController,
-          keyboardType: TextInputType.number,
-          onChanged: (value) {
-            final String formatted = _formatCardNumber(value);
-            if (formatted != value) {
-              cardNumberController.value = TextEditingValue(
-                text: formatted,
-                selection: TextSelection.collapsed(offset: formatted.length),
-              );
-            }
-          },
-          decoration: const InputDecoration(
-            labelText: 'Номер карты',
-            hintText: '0000 0000 0000 0000',
-          ),
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: TextField(
-                controller: cardExpiryController,
-                keyboardType: TextInputType.number,
-                onChanged: (value) {
-                  final String formatted = _formatExpiry(value);
-                  if (formatted != value) {
-                    cardExpiryController.value = TextEditingValue(
-                      text: formatted,
-                      selection: TextSelection.collapsed(offset: formatted.length),
-                    );
-                  }
-                },
-                decoration: const InputDecoration(
-                  labelText: 'Срок',
-                  hintText: 'MM/ГГ',
-                ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: TextField(
-                controller: cardCvvController,
-                keyboardType: TextInputType.number,
-                obscureText: true,
-                decoration: const InputDecoration(
-                  labelText: 'CVV',
-                  hintText: '123',
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Icon(
-              paymentStatus == CheckoutPaymentStatus.paid
-                  ? Icons.check_circle_rounded
-                  : paymentStatus == CheckoutPaymentStatus.failed
-                  ? Icons.error_rounded
-                  : Icons.schedule_rounded,
-              size: 18,
-              color: paymentStatus == CheckoutPaymentStatus.paid
-                  ? Colors.green
-                  : paymentStatus == CheckoutPaymentStatus.failed
-                  ? Colors.redAccent
-                  : muted,
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                _paymentStatusLabel,
-                style: TextStyle(
-                  color: muted,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
   Widget _buildAddressTile(
       BuildContext context,
       UserAddress address, {
@@ -593,13 +318,15 @@ class _OrderCheckoutScreenState extends State<OrderCheckoutScreen> {
       }) {
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
     final Color onSurface = Theme.of(context).colorScheme.onSurface;
-    final Color muted =
-    isDark ? AppColors.darkMutedForeground : AppColors.mutedForeground;
+    final Color muted = isDark
+        ? AppColors.darkMutedForeground
+        : AppColors.mutedForeground;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: InkWell(
         onTap: () {
+          _unfocusEverything();
           addressBookController.selectAddress(address.id);
           setState(() {});
         },
@@ -625,6 +352,7 @@ class _OrderCheckoutScreenState extends State<OrderCheckoutScreen> {
                 value: address.id,
                 groupValue: addressBookController.selectedAddress?.id,
                 onChanged: (_) {
+                  _unfocusEverything();
                   addressBookController.selectAddress(address.id);
                   setState(() {});
                 },
@@ -689,127 +417,253 @@ class _OrderCheckoutScreenState extends State<OrderCheckoutScreen> {
     );
   }
 
-  Future<void> _showAddAddressDialog() async {
-    final TextEditingController titleController = TextEditingController();
-    final TextEditingController addressController = TextEditingController();
-    final TextEditingController entranceController = TextEditingController();
-    final TextEditingController floorController = TextEditingController();
-    final TextEditingController apartmentController = TextEditingController();
-    final TextEditingController commentController = TextEditingController();
+  Widget _buildPaymentMethodTile(
+      BuildContext context,
+      PaymentMethodModel method, {
+        required bool selected,
+      }) {
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color onSurface = Theme.of(context).colorScheme.onSurface;
 
-    bool isPrimary = false;
-
-    await Get.dialog(
-      StatefulBuilder(
-        builder: (context, setLocalState) {
-          return AlertDialog(
-            title: const Text('Новый адрес'),
-            content: SingleChildScrollView(
+    return InkWell(
+      onTap: () {
+        _unfocusEverything();
+        paymentController.selectMethod(method);
+        setState(() {});
+      },
+      borderRadius: BorderRadius.circular(18),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: selected
+              ? (isDark ? AppColors.darkSurfaceElevated : AppColors.primaryLight)
+              : Theme.of(context).colorScheme.surface,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(
+            color: selected
+                ? (isDark ? AppColors.purpleLight : AppColors.primary)
+                : (isDark ? AppColors.darkBorder : AppColors.border),
+            width: selected ? 1.4 : 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Radio<String>(
+              value: method.id,
+              groupValue: _selectedMethod?.id,
+              onChanged: (_) {
+                _unfocusEverything();
+                paymentController.selectMethod(method);
+                setState(() {});
+              },
+            ),
+            Container(
+              width: 42,
+              height: 42,
+              decoration: BoxDecoration(
+                color: selected
+                    ? (isDark
+                    ? AppColors.purple.withOpacity(0.18)
+                    : AppColors.primary.withOpacity(0.10))
+                    : (isDark
+                    ? AppColors.darkSurfaceSoft
+                    : AppColors.primaryLight),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(
+                method.icon,
+                color: selected
+                    ? (isDark ? AppColors.purpleLight : AppColors.primary)
+                    : (isDark
+                    ? AppColors.darkMutedForeground
+                    : AppColors.mutedForeground),
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  TextField(
-                    controller: titleController,
-                    decoration: const InputDecoration(
-                      labelText: 'Название адреса',
-                      hintText: 'Дом, Работа',
-                    ),
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          method.title,
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            color: onSurface,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: isDark
+                              ? AppColors.darkSurfaceSoft
+                              : Colors.white,
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Text(
+                          method.displayBadge,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: isDark
+                                ? AppColors.purpleLight
+                                : AppColors.primary,
+                          ),
+                        ),
+                      ),
+                      if (method.isDefault) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: isDark
+                                ? AppColors.darkSurfaceSoft
+                                : Colors.white,
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Text(
+                            'По умолчанию',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: isDark
+                                  ? AppColors.purpleLight
+                                  : AppColors.primary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: addressController,
-                    decoration: const InputDecoration(
-                      labelText: 'Адрес',
+                  const SizedBox(height: 6),
+                  Text(
+                    method.subtitle,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: isDark
+                          ? AppColors.darkMutedForeground
+                          : AppColors.mutedForeground,
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: entranceController,
-                    decoration: const InputDecoration(
-                      labelText: 'Подъезд',
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: floorController,
-                    decoration: const InputDecoration(
-                      labelText: 'Этаж',
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: apartmentController,
-                    decoration: const InputDecoration(
-                      labelText: 'Квартира',
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: commentController,
-                    decoration: const InputDecoration(
-                      labelText: 'Комментарий',
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Сделать адресом по умолчанию'),
-                    value: isPrimary,
-                    onChanged: (value) {
-                      setLocalState(() {
-                        isPrimary = value;
-                      });
-                    },
                   ),
                 ],
               ),
             ),
-            actions: [
-              TextButton(
-                onPressed: Get.back,
-                child: const Text('Отмена'),
-              ),
-              ElevatedButton(
-                onPressed: () async {
-                  if (addressController.text.trim().isEmpty) {
-                    Get.snackbar('Ошибка', 'Введите адрес');
-                    return;
-                  }
-
-                  await addressBookController.addAddress(
-                    UserAddress(
-                      id: 0,
-                      title: titleController.text.trim().isEmpty
-                          ? 'Адрес'
-                          : titleController.text.trim(),
-                      address: addressController.text.trim(),
-                      entrance: entranceController.text.trim(),
-                      floor: floorController.text.trim(),
-                      apartment: apartmentController.text.trim(),
-                      comment: commentController.text.trim(),
-                      isPrimary: isPrimary,
-                    ),
-                  );
-
-                  if (mounted) {
-                    setState(() {});
-                  }
-
-                  Get.back();
-                },
-                child: const Text('Сохранить'),
-              ),
-            ],
-          );
-        },
+          ],
+        ),
       ),
     );
+  }
 
-    titleController.dispose();
-    addressController.dispose();
-    entranceController.dispose();
-    floorController.dispose();
-    apartmentController.dispose();
-    commentController.dispose();
+  Future<void> _showAddAddressDialog() async {
+    _unfocusEverything();
+
+    final UserAddress? createdAddress = await Get.dialog<UserAddress>(
+      const _CheckoutAddAddressDialog(
+        initialIsPrimary: false,
+      ),
+      barrierDismissible: true,
+    );
+
+    if (!mounted || createdAddress == null) {
+      return;
+    }
+
+    await addressBookController.addAddress(createdAddress);
+
+    if (!mounted) return;
+
+    setState(() {});
+  }
+
+  Widget _buildPaymentSection(BuildContext context) {
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Obx(() {
+      final List<PaymentMethodModel> methods =
+      paymentController.paymentMethods.toList();
+
+      return _block(
+        context,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _sectionTitle(context, 'Способ оплаты'),
+            if (methods.isEmpty) ...[
+              Text(
+                'У вас нет сохранённых способов оплаты. Добавьте карту в профиле или используйте системные методы после загрузки.',
+                style: TextStyle(
+                  color: isDark
+                      ? AppColors.darkMutedForeground
+                      : AppColors.mutedForeground,
+                  height: 1.4,
+                ),
+              ),
+            ] else ...[
+              ...methods.map(
+                    (PaymentMethodModel method) => _buildPaymentMethodTile(
+                  context,
+                  method,
+                  selected: _selectedMethod?.id == method.id,
+                ),
+              ),
+              if (_selectedMethodRequiresCvv) ...[
+                const SizedBox(height: 6),
+                TextField(
+                  controller: cvvController,
+                  keyboardType: TextInputType.number,
+                  obscureText: true,
+                  textInputAction: TextInputAction.done,
+                  onSubmitted: (_) => _confirmOrder(),
+                  decoration: const InputDecoration(
+                    labelText: 'CVV/CVC',
+                    hintText: 'Введите 3 цифры',
+                    helperText: 'CVV не сохраняется и используется только для демо-оплаты',
+                  ),
+                ),
+              ],
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  Icon(
+                    Icons.info_outline_rounded,
+                    size: 18,
+                    color: isDark
+                        ? AppColors.darkMutedForeground
+                        : AppColors.mutedForeground,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Полные реквизиты карты и CVV не хранятся. Для сохранённых карт используется только маска и локальный токен.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        height: 1.4,
+                        color: isDark
+                            ? AppColors.darkMutedForeground
+                            : AppColors.mutedForeground,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      );
+    });
   }
 
   @override
@@ -849,6 +703,7 @@ class _OrderCheckoutScreenState extends State<OrderCheckoutScreen> {
                         title: const Text('Доставка'),
                         onChanged: (value) {
                           if (value == null) return;
+                          _unfocusEverything();
                           setState(() {
                             deliveryMethod = value;
                           });
@@ -862,6 +717,7 @@ class _OrderCheckoutScreenState extends State<OrderCheckoutScreen> {
                         title: const Text('Самовывоз'),
                         onChanged: (value) {
                           if (value == null) return;
+                          _unfocusEverything();
                           setState(() {
                             deliveryMethod = value;
                           });
@@ -917,39 +773,7 @@ class _OrderCheckoutScreenState extends State<OrderCheckoutScreen> {
                 ),
               );
             }),
-          _block(
-            context,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _sectionTitle(context, 'Способ оплаты'),
-                _paymentMethodTile(
-                  context: context,
-                  value: CheckoutPaymentMethod.cash,
-                  title: 'Наличными при получении',
-                  subtitle: 'Оплата курьеру или в точке самовывоза',
-                  icon: Icons.payments_outlined,
-                ),
-                const SizedBox(height: 12),
-                _paymentMethodTile(
-                  context: context,
-                  value: CheckoutPaymentMethod.sbp,
-                  title: 'СБП',
-                  subtitle: 'Имитация онлайн-оплаты через банковское приложение',
-                  icon: Icons.qr_code_rounded,
-                ),
-                const SizedBox(height: 12),
-                _paymentMethodTile(
-                  context: context,
-                  value: CheckoutPaymentMethod.cardOnline,
-                  title: 'Банковская карта',
-                  subtitle: 'Онлайн-оплата картой с валидацией данных',
-                  icon: Icons.credit_card_rounded,
-                ),
-                _buildCardFields(context),
-              ],
-            ),
-          ),
+          _buildPaymentSection(context),
           _block(
             context,
             child: Column(
@@ -959,6 +783,7 @@ class _OrderCheckoutScreenState extends State<OrderCheckoutScreen> {
                 TextField(
                   controller: recipientCommentController,
                   maxLines: 3,
+                  textInputAction: TextInputAction.done,
                   decoration: const InputDecoration(
                     hintText: 'Например: не звонить в домофон, оставить у двери',
                   ),
@@ -974,6 +799,7 @@ class _OrderCheckoutScreenState extends State<OrderCheckoutScreen> {
                 _sectionTitle(context, 'Промокод'),
                 TextField(
                   controller: promoController,
+                  textInputAction: TextInputAction.done,
                   decoration: InputDecoration(
                     hintText: 'Введите промокод',
                     prefixIcon: Icon(
@@ -1015,6 +841,7 @@ class _OrderCheckoutScreenState extends State<OrderCheckoutScreen> {
                             : 1,
                         label: '$bonusToUse',
                         onChanged: (double value) {
+                          _unfocusEverything();
                           setState(() {
                             bonusToUse = value.toInt();
                           });
@@ -1071,14 +898,14 @@ class _OrderCheckoutScreenState extends State<OrderCheckoutScreen> {
                 _summaryRow(
                   context,
                   'Способ оплаты',
-                  _paymentMethodLabel,
+                  _selectedMethodLabel,
                 ),
                 const SizedBox(height: 8),
                 _summaryRow(
                   context,
-                  'Статус оплаты',
-                  _paymentStatusLabel,
-                  highlight: paymentStatus == CheckoutPaymentStatus.paid,
+                  'Ожидаемый статус оплаты',
+                  _predictedPaymentStatusLabel,
+                  highlight: _selectedMethod?.type != PaymentMethodType.cash,
                 ),
               ],
             ),
@@ -1086,7 +913,9 @@ class _OrderCheckoutScreenState extends State<OrderCheckoutScreen> {
           Container(
             padding: const EdgeInsets.all(18),
             decoration: BoxDecoration(
-              gradient: isDark ? AppColors.darkBrandGradient : AppColors.brandGradient,
+              gradient: isDark
+                  ? AppColors.darkBrandGradient
+                  : AppColors.brandGradient,
               borderRadius: BorderRadius.circular(24),
               boxShadow: [
                 BoxShadow(
@@ -1120,45 +949,220 @@ class _OrderCheckoutScreenState extends State<OrderCheckoutScreen> {
             ),
           ),
           const SizedBox(height: 18),
-          DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: isDark ? AppColors.darkBrandGradient : AppColors.brandGradient,
-              borderRadius: BorderRadius.circular(18),
-              boxShadow: [
-                BoxShadow(
-                  color: (isDark ? AppColors.purple : AppColors.primary)
-                      .withOpacity(0.18),
-                  blurRadius: 16,
-                  offset: const Offset(0, 8),
-                ),
-              ],
-            ),
-            child: ElevatedButton(
-              onPressed: isProcessingPayment ? null : _confirmOrder,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.transparent,
-                shadowColor: Colors.transparent,
-                foregroundColor: Colors.white,
-                minimumSize: const Size.fromHeight(54),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(18),
-                ),
+          Obx(() {
+            final bool processing = paymentController.isProcessingPayment.value;
+
+            return DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: isDark
+                    ? AppColors.darkBrandGradient
+                    : AppColors.brandGradient,
+                borderRadius: BorderRadius.circular(18),
+                boxShadow: [
+                  BoxShadow(
+                    color: (isDark ? AppColors.purple : AppColors.primary)
+                        .withOpacity(0.18),
+                    blurRadius: 16,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
               ),
-              child: isProcessingPayment
-                  ? const SizedBox(
-                width: 24,
-                height: 24,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2.4,
-                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+              child: ElevatedButton(
+                onPressed: processing ? null : _confirmOrder,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.transparent,
+                  shadowColor: Colors.transparent,
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size.fromHeight(54),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(18),
+                  ),
                 ),
-              )
-                  : const Text('Оформить заказ'),
-            ),
-          ),
+                child: processing
+                    ? const SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.4,
+                    valueColor:
+                    AlwaysStoppedAnimation<Color>(Colors.white),
+                  ),
+                )
+                    : const Text('Оформить заказ'),
+              ),
+            );
+          }),
           const SizedBox(height: 12),
         ],
       ),
+    );
+  }
+}
+
+class _CheckoutAddAddressDialog extends StatefulWidget {
+  final bool initialIsPrimary;
+
+  const _CheckoutAddAddressDialog({
+    required this.initialIsPrimary,
+  });
+
+  @override
+  State<_CheckoutAddAddressDialog> createState() =>
+      _CheckoutAddAddressDialogState();
+}
+
+class _CheckoutAddAddressDialogState extends State<_CheckoutAddAddressDialog> {
+  late final TextEditingController titleController;
+  late final TextEditingController addressController;
+  late final TextEditingController entranceController;
+  late final TextEditingController floorController;
+  late final TextEditingController apartmentController;
+  late final TextEditingController commentController;
+
+  bool isPrimary = false;
+
+  @override
+  void initState() {
+    super.initState();
+
+    isPrimary = widget.initialIsPrimary;
+    titleController = TextEditingController();
+    addressController = TextEditingController();
+    entranceController = TextEditingController();
+    floorController = TextEditingController();
+    apartmentController = TextEditingController();
+    commentController = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    FocusManager.instance.primaryFocus?.unfocus();
+
+    titleController.dispose();
+    addressController.dispose();
+    entranceController.dispose();
+    floorController.dispose();
+    apartmentController.dispose();
+    commentController.dispose();
+
+    super.dispose();
+  }
+
+  void _close() {
+    FocusScope.of(context).unfocus();
+
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    }
+  }
+
+  void _save() {
+    final String address = addressController.text.trim();
+
+    if (address.isEmpty) {
+      Get.snackbar('Ошибка', 'Введите адрес');
+      return;
+    }
+
+    FocusScope.of(context).unfocus();
+
+    Navigator.of(context).pop(
+      UserAddress(
+        id: 0,
+        title: titleController.text.trim().isEmpty
+            ? 'Адрес'
+            : titleController.text.trim(),
+        address: address,
+        entrance: entranceController.text.trim(),
+        floor: floorController.text.trim(),
+        apartment: apartmentController.text.trim(),
+        comment: commentController.text.trim(),
+        isPrimary: isPrimary,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Новый адрес'),
+      content: SingleChildScrollView(
+        child: Column(
+          children: [
+            TextField(
+              controller: titleController,
+              textInputAction: TextInputAction.next,
+              decoration: const InputDecoration(
+                labelText: 'Название адреса',
+                hintText: 'Дом, Работа',
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: addressController,
+              textInputAction: TextInputAction.next,
+              decoration: const InputDecoration(
+                labelText: 'Адрес',
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: entranceController,
+              textInputAction: TextInputAction.next,
+              decoration: const InputDecoration(
+                labelText: 'Подъезд',
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: floorController,
+              textInputAction: TextInputAction.next,
+              decoration: const InputDecoration(
+                labelText: 'Этаж',
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: apartmentController,
+              textInputAction: TextInputAction.next,
+              decoration: const InputDecoration(
+                labelText: 'Квартира',
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: commentController,
+              textInputAction: TextInputAction.done,
+              onSubmitted: (_) => _save(),
+              decoration: const InputDecoration(
+                labelText: 'Комментарий',
+              ),
+            ),
+            const SizedBox(height: 8),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Сделать адресом по умолчанию'),
+              value: isPrimary,
+              onChanged: (bool value) {
+                FocusScope.of(context).unfocus();
+                setState(() {
+                  isPrimary = value;
+                });
+              },
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _close,
+          child: const Text('Отмена'),
+        ),
+        ElevatedButton(
+          onPressed: _save,
+          child: const Text('Сохранить'),
+        ),
+      ],
     );
   }
 }

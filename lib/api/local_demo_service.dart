@@ -2,6 +2,10 @@ import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../models/order_model.dart';
+import '../models/payment_method_model.dart';
+import '../models/payment_transaction_model.dart';
+
 class LocalDemoService {
   LocalDemoService._();
 
@@ -11,6 +15,8 @@ class LocalDemoService {
   static const String _productsKey = 'demo_products_v1';
   static const String _ordersPrefix = 'demo_orders_user_';
   static const String _cartPrefix = 'demo_cart_user_';
+  static const String _paymentMethodsPrefix = 'demo_payment_methods_user_';
+  static const String _paymentsPrefix = 'demo_payments_user_';
   static const String _seededKey = 'demo_seeded_v1';
   static const String _tokenKey = 'token';
 
@@ -33,6 +39,8 @@ class LocalDemoService {
       final int userId = (user['id'] as num).toInt();
       await prefs.remove('$_ordersPrefix$userId');
       await prefs.remove('$_cartPrefix$userId');
+      await prefs.remove('$_paymentMethodsPrefix$userId');
+      await prefs.remove('$_paymentsPrefix$userId');
     }
 
     await prefs.remove(_usersKey);
@@ -425,6 +433,9 @@ class LocalDemoService {
 
     final String paymentMethod =
         checkoutData['payment_method']?.toString() ?? 'Наличный расчёт';
+    final String paymentStatus =
+        checkoutData['payment_status']?.toString() ?? 'Ожидает оплаты';
+    final String cardMask = checkoutData['card_mask']?.toString() ?? '';
 
     final String deliveryMethod =
         checkoutData['delivery_method']?.toString() ?? 'delivery';
@@ -447,6 +458,8 @@ class LocalDemoService {
       'bonus_applied': bonusApplied,
       'bonus_earned': bonusEarned,
       'payment_method': paymentMethod,
+      'payment_status': paymentStatus,
+      'card_mask': cardMask,
       'delivery_method': deliveryMethod,
       'delivery_address': deliveryAddress,
       'recipient_comment': recipientComment,
@@ -481,6 +494,283 @@ class LocalDemoService {
     final SharedPreferences prefs = await SharedPreferences.getInstance();
     final String raw = prefs.getString('$_ordersPrefix$userId') ?? '[]';
     return _decodeList(raw);
+  }
+
+  Future<void> updateOrderStatus(
+      String token,
+      int orderId,
+      String status,
+      ) async {
+    await ensureSeeded();
+
+    final int? userId = _readUserIdFromToken(token);
+    if (userId == null) {
+      throw Exception('Нет пользователя');
+    }
+
+    final List<Map<String, dynamic>> orders = await getOrdersRaw(token);
+    final int index = orders.indexWhere(
+          (order) => (order['id'] as num).toInt() == orderId,
+    );
+
+    if (index == -1) {
+      return;
+    }
+
+    orders[index] = {
+      ...orders[index],
+      'status': status,
+    };
+
+    await _saveOrders(userId, orders);
+  }
+
+  Future<List<PaymentMethodModel>> getPaymentMethods(String token) async {
+    await ensureSeeded();
+
+    final int? userId = _readUserIdFromToken(token);
+    if (userId == null) {
+      return <PaymentMethodModel>[];
+    }
+
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
+    final String key = '$_paymentMethodsPrefix$userId';
+    final String? raw = prefs.getString(key);
+
+    if (raw == null || raw.isEmpty) {
+      final List<PaymentMethodModel> seeded = _buildDefaultPaymentMethods(userId);
+      await savePaymentMethods(token, seeded);
+      return seeded;
+    }
+
+    final List<dynamic> decoded = jsonDecode(raw) as List<dynamic>;
+    return decoded
+        .map((dynamic e) => PaymentMethodModel.fromJson(
+      Map<String, dynamic>.from(e as Map),
+    ))
+        .toList();
+  }
+
+  Future<void> savePaymentMethods(
+      String token,
+      List<PaymentMethodModel> methods,
+      ) async {
+    await ensureSeeded();
+
+    final int? userId = _readUserIdFromToken(token);
+    if (userId == null) {
+      throw Exception('Сессия истекла. Войдите снова.');
+    }
+
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
+    final String key = '$_paymentMethodsPrefix$userId';
+
+    await prefs.setString(
+      key,
+      jsonEncode(
+        methods.map((PaymentMethodModel e) => e.toJson()).toList(),
+      ),
+    );
+  }
+
+  Future<void> addPaymentMethod(
+      String token,
+      PaymentMethodModel method,
+      ) async {
+    final List<PaymentMethodModel> methods = await getPaymentMethods(token);
+
+    List<PaymentMethodModel> updated = methods;
+
+    if (method.isDefault) {
+      updated = updated
+          .map((PaymentMethodModel item) => item.copyWith(isDefault: false))
+          .toList();
+    }
+
+    updated = <PaymentMethodModel>[...updated, method];
+    await savePaymentMethods(token, updated);
+  }
+
+  Future<void> updatePaymentMethod(
+      String token,
+      PaymentMethodModel method,
+      ) async {
+    final List<PaymentMethodModel> methods = await getPaymentMethods(token);
+
+    List<PaymentMethodModel> updated = methods.map((PaymentMethodModel item) {
+      if (item.id == method.id) {
+        return method;
+      }
+      return item;
+    }).toList();
+
+    if (method.isDefault) {
+      updated = updated.map((PaymentMethodModel item) {
+        if (item.id == method.id) {
+          return item.copyWith(isDefault: true);
+        }
+        return item.copyWith(isDefault: false);
+      }).toList();
+    }
+
+    await savePaymentMethods(token, updated);
+  }
+
+  Future<void> setDefaultPaymentMethod(
+      String token,
+      String methodId,
+      ) async {
+    final List<PaymentMethodModel> methods = await getPaymentMethods(token);
+
+    final List<PaymentMethodModel> updated =
+    methods.map((PaymentMethodModel item) {
+      return item.copyWith(
+        isDefault: item.id == methodId,
+        updatedAt: DateTime.now(),
+      );
+    }).toList();
+
+    await savePaymentMethods(token, updated);
+  }
+
+  Future<void> deletePaymentMethod(
+      String token,
+      String methodId,
+      ) async {
+    final List<PaymentMethodModel> methods = await getPaymentMethods(token);
+
+    PaymentMethodModel? removed;
+    try {
+      removed = methods.firstWhere((PaymentMethodModel item) => item.id == methodId);
+    } catch (_) {
+      removed = null;
+    }
+
+    List<PaymentMethodModel> updated = methods
+        .where((PaymentMethodModel item) => item.id != methodId)
+        .toList();
+
+    if (removed != null && removed.isDefault && updated.isNotEmpty) {
+      updated = updated.asMap().entries.map((entry) {
+        if (entry.key == 0) {
+          return entry.value.copyWith(
+            isDefault: true,
+            updatedAt: DateTime.now(),
+          );
+        }
+        return entry.value.copyWith(isDefault: false);
+      }).toList();
+    }
+
+    await savePaymentMethods(token, updated);
+  }
+
+  Future<List<PaymentTransactionModel>> getPaymentTransactions(String token) async {
+    await ensureSeeded();
+
+    final int? userId = _readUserIdFromToken(token);
+    if (userId == null) {
+      return <PaymentTransactionModel>[];
+    }
+
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
+    final String key = '$_paymentsPrefix$userId';
+    final String raw = prefs.getString(key) ?? '[]';
+
+    final List<dynamic> decoded = jsonDecode(raw) as List<dynamic>;
+
+    return decoded
+        .map((dynamic e) => PaymentTransactionModel.fromJson(
+      Map<String, dynamic>.from(e as Map),
+    ))
+        .toList();
+  }
+
+  Future<void> savePaymentTransaction(
+      String token,
+      PaymentTransactionModel transaction,
+      ) async {
+    await ensureSeeded();
+
+    final int? userId = _readUserIdFromToken(token);
+    if (userId == null) {
+      throw Exception('Сессия истекла. Войдите снова.');
+    }
+
+    final List<PaymentTransactionModel> transactions =
+    await getPaymentTransactions(token);
+
+    final int index = transactions.indexWhere(
+          (PaymentTransactionModel item) => item.id == transaction.id,
+    );
+
+    if (index == -1) {
+      transactions.insert(0, transaction);
+    } else {
+      transactions[index] = transaction;
+    }
+
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
+    final String key = '$_paymentsPrefix$userId';
+
+    await prefs.setString(
+      key,
+      jsonEncode(
+        transactions.map((PaymentTransactionModel e) => e.toJson()).toList(),
+      ),
+    );
+  }
+
+  Future<List<PaymentTransactionModel>> getPaymentsForOrder(
+      String token,
+      int orderId,
+      ) async {
+    final List<PaymentTransactionModel> all = await getPaymentTransactions(token);
+    return all.where((PaymentTransactionModel e) => e.orderId == orderId).toList();
+  }
+
+  Future<PaymentTransactionModel?> getLatestPaymentForOrder(
+      String token,
+      int orderId,
+      ) async {
+    final List<PaymentTransactionModel> items =
+    await getPaymentsForOrder(token, orderId);
+
+    if (items.isEmpty) {
+      return null;
+    }
+
+    items.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return items.first;
+  }
+
+  List<PaymentMethodModel> _buildDefaultPaymentMethods(int userId) {
+    final DateTime now = DateTime.now();
+
+    return <PaymentMethodModel>[
+      PaymentMethodModel(
+        id: 'cash_system',
+        userId: userId,
+        type: PaymentMethodType.cash,
+        title: 'Наличными',
+        isDefault: true,
+        isActive: true,
+        isSystem: true,
+        createdAt: now,
+        updatedAt: now,
+      ),
+      PaymentMethodModel(
+        id: 'sbp_system',
+        userId: userId,
+        type: PaymentMethodType.sbp,
+        title: 'Система быстрых платежей',
+        isDefault: false,
+        isActive: true,
+        isSystem: true,
+        createdAt: now,
+        updatedAt: now,
+      ),
+    ];
   }
 
   Future<void> _updateLoyaltyAfterOrder(
@@ -548,24 +838,17 @@ class LocalDemoService {
   Future<List<Map<String, dynamic>>> _getUsersSafe() async {
     final SharedPreferences prefs = await SharedPreferences.getInstance();
     final String raw = prefs.getString(_usersKey) ?? '[]';
+
     try {
       return _decodeList(raw);
     } catch (_) {
-      return [];
+      return <Map<String, dynamic>>[];
     }
   }
 
   Future<void> _saveUsers(List<Map<String, dynamic>> users) async {
     final SharedPreferences prefs = await SharedPreferences.getInstance();
     await prefs.setString(_usersKey, jsonEncode(users));
-  }
-
-  Future<void> _saveCart(
-      int userId,
-      List<Map<String, dynamic>> cart,
-      ) async {
-    final SharedPreferences prefs = await SharedPreferences.getInstance();
-    await prefs.setString('$_cartPrefix$userId', jsonEncode(cart));
   }
 
   Future<void> _saveOrders(
@@ -576,10 +859,18 @@ class LocalDemoService {
     await prefs.setString('$_ordersPrefix$userId', jsonEncode(orders));
   }
 
+  Future<void> _saveCart(
+      int userId,
+      List<Map<String, dynamic>> cart,
+      ) async {
+    final SharedPreferences prefs = await SharedPreferences.getInstance();
+    await prefs.setString('$_cartPrefix$userId', jsonEncode(cart));
+  }
+
   List<Map<String, dynamic>> _decodeList(String raw) {
     final List<dynamic> decoded = jsonDecode(raw) as List<dynamic>;
     return decoded
-        .map((e) => Map<String, dynamic>.from(e as Map))
+        .map((dynamic e) => Map<String, dynamic>.from(e as Map))
         .toList();
   }
 
@@ -588,58 +879,58 @@ class LocalDemoService {
       'id': user['id'],
       'name': user['name'],
       'email': user['email'],
-      'phone': user['phone'] ?? '',
-      'address': user['address'] ?? '',
-      'loyalty_points': user['loyalty_points'] ?? 0,
-      'total_spent': user['total_spent'] ?? 0,
-      'loyalty_level': user['loyalty_level'] ?? 'Bronze',
-      'loyalty_color': user['loyalty_color'] ?? '#CD7F32',
+      'phone': user['phone'],
+      'address': user['address'],
+      'loyalty_points': user['loyalty_points'],
+      'total_spent': user['total_spent'],
+      'loyalty_level': user['loyalty_level'],
+      'loyalty_color': user['loyalty_color'],
     };
   }
-
-  String _makeToken(int userId) => 'demo-token-$userId';
 
   int? _readUserIdFromToken(String token) {
     if (!token.startsWith('demo-token-')) {
       return null;
     }
 
-    return int.tryParse(token.replaceFirst('demo-token-', ''));
+    final String part = token.replaceFirst('demo-token-', '').trim();
+    return int.tryParse(part);
   }
 
+  String _makeToken(int userId) => 'demo-token-$userId';
+
   int _readProductId(Map<String, dynamic> item) {
-    if (item['product_id'] != null) {
-      return (item['product_id'] as num).toInt();
+    final dynamic value = item['product'] ?? item['product_id'] ?? item['id'];
+
+    if (value is Map<String, dynamic>) {
+      return (value['id'] as num).toInt();
     }
 
-    if (item['product'] is Map<String, dynamic>) {
-      return ((item['product'] as Map<String, dynamic>)['id'] as num).toInt();
-    }
-
-    return 0;
+    return (value as num).toInt();
   }
 
   int _readQuantity(Map<String, dynamic> item) {
-    if (item['quantity'] != null) {
-      return (item['quantity'] as num).toInt();
-    }
-
-    return 1;
+    final dynamic value = item['quantity'] ?? 1;
+    return (value as num).toInt();
   }
 
   double _numToDouble(dynamic value) {
+    if (value == null) {
+      return 0.0;
+    }
+
     if (value is num) {
       return value.toDouble();
     }
 
-    return double.tryParse(value.toString()) ?? 0;
+    return double.tryParse(value.toString()) ?? 0.0;
   }
 
   List<Map<String, dynamic>> _demoProducts() {
     return [
       {
         'id': 1,
-        'name': 'Нежные розы',
+        'name': 'Розовый рассвет',
         'description': 'Классический букет из пастельных роз.',
         'price': 1800.0,
         'image_url':

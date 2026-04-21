@@ -142,6 +142,54 @@ class OrderController extends GetxController {
     trackingEtaByOrderId[order.id] = _buildEstimatedDeliveryTime(initialStage);
   }
 
+  String _statusTextByIndex(int index) {
+    switch (OrderTrackingHelper.indexToStage(index)) {
+      case OrderTrackingStage.accepted:
+        return 'Принят';
+      case OrderTrackingStage.preparing:
+        return 'Собирается';
+      case OrderTrackingStage.courier:
+        return 'Передан курьеру';
+      case OrderTrackingStage.delivered:
+        return 'Доставлен';
+    }
+  }
+
+  Future<void> _persistTrackingStep(int orderId, int stepIndex) async {
+    final String newStatus = _statusTextByIndex(stepIndex);
+
+    await _orderService.updateOrderStatus(orderId, newStatus);
+
+    final int orderIndex = orders.indexWhere((order) => order.id == orderId);
+    if (orderIndex == -1) {
+      return;
+    }
+
+    final OrderModel oldOrder = orders[orderIndex];
+
+    orders[orderIndex] = OrderModel(
+      id: oldOrder.id,
+      total: oldOrder.total,
+      itemsTotal: oldOrder.itemsTotal,
+      deliveryCost: oldOrder.deliveryCost,
+      bonusApplied: oldOrder.bonusApplied,
+      bonusEarned: oldOrder.bonusEarned,
+      paymentMethod: oldOrder.paymentMethod,
+      paymentStatus: oldOrder.paymentStatus,
+      cardMask: oldOrder.cardMask,
+      deliveryAddress: oldOrder.deliveryAddress,
+      status: newStatus,
+      items: oldOrder.items,
+      createdAt: oldOrder.createdAt,
+    );
+
+    orders.refresh();
+
+    if (lastCreatedOrder.value?.id == orderId) {
+      lastCreatedOrder.value = orders[orderIndex];
+    }
+  }
+
   void _startTrackingIfNeeded(OrderModel order) {
     final int currentIndex = trackingStepByOrderId[order.id] ?? 0;
 
@@ -177,6 +225,8 @@ class OrderController extends GetxController {
 
             trackingStepByOrderId.refresh();
             trackingEtaByOrderId.refresh();
+
+            await _persistTrackingStep(order.id, nextIndex);
             await _notifyAboutStatusChange(order.id, nextIndex);
           } else {
             timer.cancel();
@@ -238,12 +288,14 @@ class OrderController extends GetxController {
 
   String getTrackingEtaText(int orderId) {
     final DateTime? eta = getTrackingEta(orderId);
+
     if (eta == null) {
       return '--:--';
     }
 
     final String hour = eta.hour.toString().padLeft(2, '0');
     final String minute = eta.minute.toString().padLeft(2, '0');
+
     return '$hour:$minute';
   }
 
