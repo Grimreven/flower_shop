@@ -37,7 +37,8 @@ class ProfileScreen extends StatefulWidget {
   State<ProfileScreen> createState() => _ProfileScreenState();
 }
 
-class _ProfileScreenState extends State<ProfileScreen> {
+class _ProfileScreenState extends State<ProfileScreen>
+    with SingleTickerProviderStateMixin {
   final AuthController authController = Get.find<AuthController>();
   final SettingsController settingsController = Get.find<SettingsController>();
   final OrderController orderController = Get.find<OrderController>();
@@ -54,6 +55,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
   late final TextEditingController emailController;
   late final TextEditingController phoneController;
   late final TextEditingController addressController;
+
+  static const Duration _sectionAnimationDuration =
+  Duration(milliseconds: 320);
+  static const Duration _tabAnimationDuration = Duration(milliseconds: 280);
+  static const Curve _tabCurve = Curves.easeInOutCubic;
+  static const Curve _contentCurve = Curves.easeOutCubic;
 
   @override
   void initState() {
@@ -189,6 +196,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     nameController.text = snapshot.name;
     emailController.text = snapshot.email;
+    phoneController.text = snapshot.email;
     phoneController.text = snapshot.phone ?? '';
     addressController.text = snapshot.address ?? '';
 
@@ -450,6 +458,39 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  Future<void> _showEditCardDialog(PaymentMethodModel method) async {
+    _unfocusEverything();
+
+    final PaymentCardFormResult? result =
+    await showModalBottomSheet<PaymentCardFormResult>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: Theme.of(context).brightness == Brightness.dark
+          ? AppColors.darkSurface
+          : Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (BuildContext context) {
+        return _PaymentCardBottomSheet(method: method);
+      },
+    );
+
+    if (result == null) return;
+
+    try {
+      await paymentController.updateCardMethod(
+        id: method.id,
+        expiryMonth: result.expiryMonth,
+        expiryYear: result.expiryYear,
+        isDefault: result.setAsDefault,
+      );
+      _showMessage('Карта успешно обновлена');
+    } catch (e) {
+      _showMessage('Ошибка при обновлении карты: $e');
+    }
+  }
 
   Future<void> _setDefaultPaymentMethod(String id) async {
     _unfocusEverything();
@@ -473,56 +514,163 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  Widget _sectionButton(
-      BuildContext context,
-      String id,
-      String label,
-      IconData icon,
-      ) {
+  int _sectionIndex(String id) {
+    switch (id) {
+      case 'info':
+        return 0;
+      case 'loyalty':
+        return 1;
+      case 'settings':
+        return 2;
+      default:
+        return 0;
+    }
+  }
+
+  Alignment _tabAlignment() {
+    switch (_sectionIndex(activeSection)) {
+      case 0:
+        return Alignment.centerLeft;
+      case 1:
+        return Alignment.center;
+      case 2:
+        return Alignment.centerRight;
+      default:
+        return Alignment.centerLeft;
+    }
+  }
+
+  Widget _animatedSegmentedNavigation(BuildContext context) {
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color trackColor =
+    isDark ? AppColors.darkSurfaceSoft : AppColors.primaryLight;
+
+    return _card(
+      context,
+      padding: const EdgeInsets.all(6),
+      child: SizedBox(
+        height: 68,
+        child: LayoutBuilder(
+          builder: (BuildContext context, BoxConstraints constraints) {
+            final double segmentWidth = (constraints.maxWidth - 12) / 3;
+
+            return Stack(
+              children: [
+                AnimatedAlign(
+                  duration: _tabAnimationDuration,
+                  curve: _tabCurve,
+                  alignment: _tabAlignment(),
+                  child: Container(
+                    width: segmentWidth,
+                    margin: const EdgeInsets.symmetric(horizontal: 0),
+                    decoration: BoxDecoration(
+                      gradient: isDark
+                          ? AppColors.darkBrandGradient
+                          : AppColors.brandGradient,
+                      borderRadius: BorderRadius.circular(18),
+                      boxShadow: [
+                        BoxShadow(
+                          color: (isDark ? AppColors.purple : AppColors.primary)
+                              .withOpacity(0.18),
+                          blurRadius: 16,
+                          offset: const Offset(0, 8),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                Row(
+                  children: [
+                    _tabButton(
+                      context,
+                      id: 'info',
+                      label: 'Данные',
+                      icon: Icons.person_outline_rounded,
+                    ),
+                    _tabButton(
+                      context,
+                      id: 'loyalty',
+                      label: 'Лояльность',
+                      icon: Icons.card_giftcard_rounded,
+                    ),
+                    _tabButton(
+                      context,
+                      id: 'settings',
+                      label: 'Настройки',
+                      icon: Icons.settings_outlined,
+                    ),
+                  ],
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _tabButton(
+      BuildContext context, {
+        required String id,
+        required String label,
+        required IconData icon,
+      }) {
     final bool isActive = activeSection == id;
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
 
+    final Color inactiveColor = isDark
+        ? AppColors.darkMutedForeground
+        : AppColors.mutedForeground;
+
     return Expanded(
-      child: GestureDetector(
-        onTap: () => _changeSection(id),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          margin: const EdgeInsets.all(4),
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          decoration: BoxDecoration(
-            gradient: isActive
-                ? (isDark
-                ? AppColors.darkBrandGradient
-                : AppColors.brandGradient)
-                : null,
-            color: isActive ? null : Colors.transparent,
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Column(
-            children: [
-              Icon(
-                icon,
-                color: isActive
-                    ? Colors.white
-                    : (isDark
-                    ? AppColors.darkMutedForeground
-                    : AppColors.mutedForeground),
-                size: 20,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(18),
+          onTap: () => _changeSection(id),
+          child: SizedBox(
+            height: 68,
+            child: AnimatedScale(
+              scale: isActive ? 1 : 0.98,
+              duration: _tabAnimationDuration,
+              curve: _tabCurve,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  AnimatedSwitcher(
+                    duration: _tabAnimationDuration,
+                    transitionBuilder: (Widget child, Animation<double> anim) {
+                      return FadeTransition(
+                        opacity: anim,
+                        child: ScaleTransition(
+                          scale: anim.drive(
+                            Tween<double>(begin: 0.92, end: 1),
+                          ),
+                          child: child,
+                        ),
+                      );
+                    },
+                    child: Icon(
+                      icon,
+                      key: ValueKey<String>('${id}_$isActive'),
+                      color: isActive ? Colors.white : inactiveColor,
+                      size: isActive ? 21 : 20,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  AnimatedDefaultTextStyle(
+                    duration: _tabAnimationDuration,
+                    curve: _tabCurve,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: isActive ? Colors.white : inactiveColor,
+                      fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+                    ),
+                    child: Text(label),
+                  ),
+                ],
               ),
-              const SizedBox(height: 4),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: isActive
-                      ? Colors.white
-                      : (isDark
-                      ? AppColors.darkMutedForeground
-                      : AppColors.mutedForeground),
-                  fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
-                ),
-              ),
-            ],
+            ),
           ),
         ),
       ),
@@ -565,7 +713,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         boxShadow: [
           BoxShadow(
             color: isDark
-                ? AppColors.purple.withValues(alpha: 0.05)
+                ? AppColors.purple.withOpacity(0.05)
                 : AppColors.shadow,
             blurRadius: 18,
             offset: const Offset(0, 8),
@@ -582,13 +730,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ) {
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Container(
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 240),
+      curve: Curves.easeOutCubic,
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: isDark
             ? AppColors.darkSurfaceElevated
-            : AppColors.primaryLight.withValues(alpha: 0.35),
+            : AppColors.primaryLight.withOpacity(0.35),
         borderRadius: BorderRadius.circular(18),
         border: Border.all(
           color: isDark ? AppColors.darkBorder : Colors.transparent,
@@ -597,7 +747,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 240),
+            curve: Curves.easeOutCubic,
             width: 46,
             height: 46,
             decoration: BoxDecoration(
@@ -940,7 +1092,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                   )
                 else
-                  ...methods.map((method) => _buildPaymentMethodTile(context, method)),
+                  ...methods
+                      .map((method) => _buildPaymentMethodTile(context, method)),
               ],
             ),
           ),
@@ -1132,6 +1285,53 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  Widget _buildAnimatedSectionContent(User user) {
+    Widget content;
+
+    switch (activeSection) {
+      case 'loyalty':
+        content = _buildLoyaltySection(user);
+        break;
+      case 'settings':
+        content = _buildSettingsSection(context);
+        break;
+      case 'info':
+      default:
+        content = _buildInfoSection(context, user);
+        break;
+    }
+
+    return AnimatedSwitcher(
+      duration: _sectionAnimationDuration,
+      reverseDuration: const Duration(milliseconds: 220),
+      switchInCurve: _contentCurve,
+      switchOutCurve: Curves.easeInCubic,
+      transitionBuilder: (Widget child, Animation<double> animation) {
+        final Animation<Offset> offsetAnimation = Tween<Offset>(
+          begin: const Offset(0.04, 0),
+          end: Offset.zero,
+        ).animate(
+          CurvedAnimation(
+            parent: animation,
+            curve: Curves.easeOutCubic,
+          ),
+        );
+
+        return FadeTransition(
+          opacity: animation,
+          child: SlideTransition(
+            position: offsetAnimation,
+            child: child,
+          ),
+        );
+      },
+      child: KeyedSubtree(
+        key: ValueKey<String>(activeSection),
+        child: content,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final Color bg = Theme.of(context).scaffoldBackgroundColor;
@@ -1218,133 +1418,116 @@ class _ProfileScreenState extends State<ProfileScreen> {
           padding: const EdgeInsets.all(16),
           child: Column(
             children: [
-              _card(
-                context,
-                child: Row(
-                  children: [
-                    Container(
-                      width: 68,
-                      height: 68,
-                      decoration: BoxDecoration(
-                        gradient: isDark
-                            ? AppColors.darkBrandGradient
-                            : AppColors.brandGradient,
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color:
-                            (isDark ? AppColors.purple : AppColors.primary)
-                                .withValues(alpha: 0.18),
-                            blurRadius: 16,
-                            offset: const Offset(0, 8),
-                          ),
-                        ],
-                      ),
-                      child: Center(
-                        child: Text(
-                          user.name.isNotEmpty
-                              ? user.name
-                              .split(' ')
-                              .where((String n) => n.isNotEmpty)
-                              .map((String n) => n[0])
-                              .join()
-                              .toUpperCase()
-                              : 'U',
-                          style: const TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.white,
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 260),
+                curve: Curves.easeOutCubic,
+                child: _card(
+                  context,
+                  child: Row(
+                    children: [
+                      AnimatedContainer(
+                        duration: const Duration(milliseconds: 260),
+                        curve: Curves.easeOutCubic,
+                        width: 68,
+                        height: 68,
+                        decoration: BoxDecoration(
+                          gradient: isDark
+                              ? AppColors.darkBrandGradient
+                              : AppColors.brandGradient,
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color:
+                              (isDark ? AppColors.purple : AppColors.primary)
+                                  .withOpacity(0.18),
+                              blurRadius: 16,
+                              offset: const Offset(0, 8),
+                            ),
+                          ],
+                        ),
+                        child: Center(
+                          child: Text(
+                            user.name.isNotEmpty
+                                ? user.name
+                                .split(' ')
+                                .where((String n) => n.isNotEmpty)
+                                .map((String n) => n[0])
+                                .join()
+                                .toUpperCase()
+                                : 'U',
+                            style: const TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            user.name,
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.w700,
-                              color: onSurface,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            user.email,
-                            style: TextStyle(
-                              color: isDark
-                                  ? AppColors.darkMutedForeground
-                                  : AppColors.mutedForeground,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 6,
-                            ),
-                            decoration: BoxDecoration(
-                              color: isDark
-                                  ? AppColors.darkSurfaceElevated
-                                  : AppColors.primaryLight,
-                              borderRadius: BorderRadius.circular(999),
-                              border: Border.all(
-                                color: isDark
-                                    ? AppColors.darkBorder
-                                    : Colors.transparent,
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            AnimatedDefaultTextStyle(
+                              duration: const Duration(milliseconds: 240),
+                              curve: Curves.easeOutCubic,
+                              style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.w700,
+                                color: onSurface,
                               ),
+                              child: Text(user.name),
                             ),
-                            child: Text(
-                              '${loyaltyPreview.level} • ${loyaltyPreview.points} баллов',
+                            const SizedBox(height: 4),
+                            Text(
+                              user.email,
                               style: TextStyle(
                                 color: isDark
-                                    ? AppColors.purpleLight
-                                    : AppColors.primary,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
+                                    ? AppColors.darkMutedForeground
+                                    : AppColors.mutedForeground,
                               ),
                             ),
-                          ),
-                        ],
+                            const SizedBox(height: 8),
+                            AnimatedContainer(
+                              duration: const Duration(milliseconds: 260),
+                              curve: Curves.easeOutCubic,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 6,
+                              ),
+                              decoration: BoxDecoration(
+                                color: isDark
+                                    ? AppColors.darkSurfaceElevated
+                                    : AppColors.primaryLight,
+                                borderRadius: BorderRadius.circular(999),
+                                border: Border.all(
+                                  color: isDark
+                                      ? AppColors.darkBorder
+                                      : Colors.transparent,
+                                ),
+                              ),
+                              child: Text(
+                                '${loyaltyPreview.level} • ${loyaltyPreview.points} баллов',
+                                style: TextStyle(
+                                  color: isDark
+                                      ? AppColors.purpleLight
+                                      : AppColors.primary,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
               const SizedBox(height: 14),
-              _card(
-                context,
-                padding: const EdgeInsets.all(6),
-                child: Row(
-                  children: [
-                    _sectionButton(
-                      context,
-                      'info',
-                      'Данные',
-                      Icons.person_outline_rounded,
-                    ),
-                    _sectionButton(
-                      context,
-                      'loyalty',
-                      'Лояльность',
-                      Icons.card_giftcard_rounded,
-                    ),
-                    _sectionButton(
-                      context,
-                      'settings',
-                      'Настройки',
-                      Icons.settings_outlined,
-                    ),
-                  ],
-                ),
-              ),
+              _animatedSegmentedNavigation(context),
               const SizedBox(height: 14),
-              if (activeSection == 'info') _buildInfoSection(context, user),
-              if (activeSection == 'loyalty') _buildLoyaltySection(user),
-              if (activeSection == 'settings') _buildSettingsSection(context),
+              _buildAnimatedSectionContent(user),
             ],
           ),
         ),
@@ -1357,14 +1540,14 @@ class PaymentCardFormResult {
   final String cardNumber;
   final String expiryMonth;
   final String expiryYear;
-  final String cvv;
+  final String? cvv;
   final bool setAsDefault;
 
   const PaymentCardFormResult({
     required this.cardNumber,
     required this.expiryMonth,
     required this.expiryYear,
-    required this.cvv,
+    this.cvv,
     required this.setAsDefault,
   });
 }
@@ -1377,7 +1560,8 @@ class _PaymentCardBottomSheet extends StatefulWidget {
   });
 
   @override
-  State<_PaymentCardBottomSheet> createState() => _PaymentCardBottomSheetState();
+  State<_PaymentCardBottomSheet> createState() =>
+      _PaymentCardBottomSheetState();
 }
 
 class _PaymentCardBottomSheetState extends State<_PaymentCardBottomSheet> {
@@ -1443,6 +1627,13 @@ class _PaymentCardBottomSheetState extends State<_PaymentCardBottomSheet> {
         );
         return;
       }
+
+      if (cvv.length != 3 || int.tryParse(cvv) == null) {
+        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+          const SnackBar(content: Text('CVV должен содержать 3 цифры')),
+        );
+        return;
+      }
     }
 
     final int? month = int.tryParse(expiryMonth);
@@ -1461,13 +1652,6 @@ class _PaymentCardBottomSheetState extends State<_PaymentCardBottomSheet> {
       return;
     }
 
-    if (cvv.length != 3 || int.tryParse(cvv) == null) {
-      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-        const SnackBar(content: Text('CVV должен содержать 3 цифры')),
-      );
-      return;
-    }
-
     FocusScope.of(context).unfocus();
 
     Navigator.of(context).pop(
@@ -1475,7 +1659,7 @@ class _PaymentCardBottomSheetState extends State<_PaymentCardBottomSheet> {
         cardNumber: cardNumber,
         expiryMonth: expiryMonth.padLeft(2, '0'),
         expiryYear: normalizedYear,
-        cvv: cvv,
+        cvv: isEdit ? null : cvv,
         setAsDefault: setAsDefault,
       ),
     );
@@ -1550,7 +1734,9 @@ class _PaymentCardBottomSheetState extends State<_PaymentCardBottomSheet> {
                   child: TextField(
                     controller: yearController,
                     keyboardType: TextInputType.number,
-                    textInputAction: TextInputAction.next,
+                    textInputAction:
+                    isEdit ? TextInputAction.done : TextInputAction.next,
+                    onSubmitted: isEdit ? (_) => _submit() : null,
                     decoration: const InputDecoration(
                       labelText: 'Год',
                       hintText: 'ГГ',
@@ -1559,18 +1745,20 @@ class _PaymentCardBottomSheetState extends State<_PaymentCardBottomSheet> {
                 ),
               ],
             ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: cvvController,
-              keyboardType: TextInputType.number,
-              obscureText: true,
-              textInputAction: TextInputAction.done,
-              onSubmitted: (_) => _submit(),
-              decoration: const InputDecoration(
-                labelText: 'CVV/CVC',
-                hintText: '123',
+            if (!isEdit) ...[
+              const SizedBox(height: 12),
+              TextField(
+                controller: cvvController,
+                keyboardType: TextInputType.number,
+                obscureText: true,
+                textInputAction: TextInputAction.done,
+                onSubmitted: (_) => _submit(),
+                decoration: const InputDecoration(
+                  labelText: 'CVV/CVC',
+                  hintText: '123',
+                ),
               ),
-            ),
+            ],
             const SizedBox(height: 10),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
@@ -1586,288 +1774,9 @@ class _PaymentCardBottomSheetState extends State<_PaymentCardBottomSheet> {
             ),
             const SizedBox(height: 12),
             Text(
-              'CVV не сохраняется. После добавления карты в приложении хранится только маска карты, срок действия и локальный токен.',
-              style: TextStyle(
-                fontSize: 12,
-                height: 1.4,
-                color: isDark
-                    ? AppColors.darkMutedForeground
-                    : AppColors.mutedForeground,
-              ),
-            ),
-            const SizedBox(height: 20),
-            SizedBox(
-              width: double.infinity,
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: isDark
-                      ? AppColors.darkBrandGradient
-                      : AppColors.brandGradient,
-                  borderRadius: BorderRadius.circular(18),
-                ),
-                child: ElevatedButton(
-                  onPressed: _submit,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.transparent,
-                    shadowColor: Colors.transparent,
-                    foregroundColor: Colors.white,
-                    minimumSize: const Size.fromHeight(54),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(18),
-                    ),
-                  ),
-                  child: Text(isEdit ? 'Сохранить' : 'Добавить'),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _PaymentCardBottomSheetState extends State<_PaymentCardBottomSheet> {
-  late final TextEditingController titleController;
-  late final TextEditingController holderController;
-  late final TextEditingController cardNumberController;
-  late final TextEditingController monthController;
-  late final TextEditingController yearController;
-  late final TextEditingController bankController;
-
-  bool setAsDefault = false;
-
-  bool get isEdit => widget.method != null;
-
-  @override
-  void initState() {
-    super.initState();
-
-    titleController = TextEditingController(text: widget.method?.title ?? '');
-    holderController =
-        TextEditingController(text: widget.method?.holderName ?? '');
-    cardNumberController =
-        TextEditingController(text: widget.method?.maskedNumber ?? '');
-    monthController =
-        TextEditingController(text: widget.method?.expiryMonth ?? '');
-    yearController = TextEditingController(text: widget.method?.expiryYear ?? '');
-    bankController = TextEditingController(text: widget.method?.bankName ?? '');
-    setAsDefault = widget.method?.isDefault ?? false;
-  }
-
-  @override
-  void dispose() {
-    FocusManager.instance.primaryFocus?.unfocus();
-    titleController.dispose();
-    holderController.dispose();
-    cardNumberController.dispose();
-    monthController.dispose();
-    yearController.dispose();
-    bankController.dispose();
-    super.dispose();
-  }
-
-  String _digitsOnly(String value) => value.replaceAll(RegExp(r'[^0-9]'), '');
-
-  String _formatCardNumber(String value) {
-    final String digits = _digitsOnly(value);
-    final String limited = digits.length > 16 ? digits.substring(0, 16) : digits;
-
-    final List<String> chunks = <String>[];
-    for (int i = 0; i < limited.length; i += 4) {
-      final int end = (i + 4 < limited.length) ? i + 4 : limited.length;
-      chunks.add(limited.substring(i, end));
-    }
-
-    return chunks.join(' ');
-  }
-
-  void _submit() {
-    final String title = titleController.text.trim();
-    final String holderName = holderController.text.trim();
-    final String cardNumber = cardNumberController.text.trim();
-    final String expiryMonth = monthController.text.trim();
-    final String expiryYear = yearController.text.trim();
-    final String bankName = bankController.text.trim();
-
-    if (title.isEmpty) {
-      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-        const SnackBar(content: Text('Введите название карты')),
-      );
-      return;
-    }
-
-    if (holderName.isEmpty) {
-      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-        const SnackBar(content: Text('Введите имя держателя карты')),
-      );
-      return;
-    }
-
-    if (!isEdit) {
-      final String digits = _digitsOnly(cardNumber);
-      if (digits.length != 16) {
-        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-          const SnackBar(content: Text('Номер карты должен содержать 16 цифр')),
-        );
-        return;
-      }
-    }
-
-    final int? month = int.tryParse(expiryMonth);
-    if (month == null || month < 1 || month > 12) {
-      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-        const SnackBar(content: Text('Введите корректный месяц')),
-      );
-      return;
-    }
-
-    final String normalizedYear = _digitsOnly(expiryYear);
-    if (normalizedYear.length != 2) {
-      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-        const SnackBar(content: Text('Введите год в формате ГГ')),
-      );
-      return;
-    }
-
-    FocusScope.of(context).unfocus();
-
-    Navigator.of(context).pop(
-      PaymentCardFormResult(
-        title: title,
-        holderName: holderName,
-        cardNumber: cardNumber,
-        expiryMonth: expiryMonth.padLeft(2, '0'),
-        expiryYear: normalizedYear,
-        bankName: bankName.isEmpty ? null : bankName,
-        setAsDefault: setAsDefault,
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final bool isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return Padding(
-      padding: EdgeInsets.fromLTRB(
-        20,
-        20,
-        20,
-        MediaQuery.of(context).viewInsets.bottom + 20,
-      ),
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              isEdit ? 'Редактировать карту' : 'Добавить карту',
-              style: const TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            const SizedBox(height: 18),
-            TextField(
-              controller: titleController,
-              textInputAction: TextInputAction.next,
-              decoration: const InputDecoration(
-                labelText: 'Название',
-                hintText: 'Например, Личная карта',
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: holderController,
-              textCapitalization: TextCapitalization.characters,
-              textInputAction: TextInputAction.next,
-              decoration: const InputDecoration(
-                labelText: 'Держатель карты',
-                hintText: 'IVAN IVANOV',
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: cardNumberController,
-              enabled: !isEdit,
-              keyboardType: TextInputType.number,
-              textInputAction: TextInputAction.next,
-              onChanged: isEdit
-                  ? null
-                  : (String value) {
-                final String formatted = _formatCardNumber(value);
-                if (formatted != value) {
-                  cardNumberController.value = TextEditingValue(
-                    text: formatted,
-                    selection: TextSelection.collapsed(
-                      offset: formatted.length,
-                    ),
-                  );
-                }
-              },
-              decoration: InputDecoration(
-                labelText: 'Номер карты',
-                hintText: '0000 0000 0000 0000',
-                helperText: isEdit
-                    ? 'Полный номер карты повторно не хранится'
-                    : 'Сохраняется только маска и токен',
-              ),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: monthController,
-                    keyboardType: TextInputType.number,
-                    textInputAction: TextInputAction.next,
-                    decoration: const InputDecoration(
-                      labelText: 'Месяц',
-                      hintText: 'MM',
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: TextField(
-                    controller: yearController,
-                    keyboardType: TextInputType.number,
-                    textInputAction: TextInputAction.next,
-                    decoration: const InputDecoration(
-                      labelText: 'Год',
-                      hintText: 'ГГ',
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: bankController,
-              textInputAction: TextInputAction.done,
-              onSubmitted: (_) => _submit(),
-              decoration: const InputDecoration(
-                labelText: 'Банк',
-                hintText: 'Например, Kaspi / Halyk',
-              ),
-            ),
-            const SizedBox(height: 10),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Сделать способом по умолчанию'),
-              value: setAsDefault,
-              activeThumbColor: isDark ? AppColors.purple : AppColors.primary,
-              onChanged: (bool value) {
-                FocusScope.of(context).unfocus();
-                setState(() {
-                  setAsDefault = value;
-                });
-              },
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'CVV и полный номер карты не сохраняются. Для демонстрации хранится только маска карты и локальный токен.',
+              isEdit
+                  ? 'При редактировании обновляется только срок действия и статус карты по умолчанию.'
+                  : 'CVV не сохраняется. После добавления карты в приложении хранится только маска карты, срок действия и локальный токен.',
               style: TextStyle(
                 fontSize: 12,
                 height: 1.4,
