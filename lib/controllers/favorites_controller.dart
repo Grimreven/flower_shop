@@ -21,11 +21,13 @@ class FavoritesController extends GetxController {
   void onInit() {
     super.onInit();
 
-    ever<String>(authController.token, (_) async {
+    ever(authController.token, (_) async {
       await loadFavorites();
     });
 
-    loadFavorites();
+    Future.delayed(Duration.zero, () async {
+      await loadFavorites();
+    });
   }
 
   Future<void> loadFavorites() async {
@@ -38,25 +40,20 @@ class FavoritesController extends GetxController {
         return;
       }
 
-      final List<int> ids =
-      await _favoritesService.getFavorites(authController.token.value);
+      final List<int> ids = await _favoritesService.getFavorites(
+        authController.token.value,
+      );
 
       favoriteIds.assignAll(ids);
 
       final List<Product> allProducts = await ApiService.fetchAllProducts();
 
       favoriteProducts.assignAll(
-        allProducts.where((product) => ids.contains(product.id)).toList(),
+        allProducts.where((Product product) => ids.contains(product.id)).toList(),
       );
-    } catch (e) {
+    } catch (_) {
       favoriteIds.clear();
       favoriteProducts.clear();
-
-      Get.snackbar(
-        'Ошибка',
-        'Не удалось загрузить избранное',
-        snackPosition: SnackPosition.BOTTOM,
-      );
     } finally {
       isLoading.value = false;
     }
@@ -82,12 +79,12 @@ class FavoritesController extends GetxController {
 
       if (wasFavorite) {
         favoriteIds.remove(product.id);
-        favoriteProducts.removeWhere((item) => item.id == product.id);
+        favoriteProducts.removeWhere((Product item) => item.id == product.id);
       } else {
         favoriteIds.add(product.id);
 
         final bool alreadyExists = favoriteProducts.any(
-              (item) => item.id == product.id,
+              (Product item) => item.id == product.id,
         );
 
         if (!alreadyExists) {
@@ -105,7 +102,7 @@ class FavoritesController extends GetxController {
             : '${product.name} добавлен в избранное',
         snackPosition: SnackPosition.BOTTOM,
       );
-    } catch (e) {
+    } catch (_) {
       Get.snackbar(
         'Ошибка',
         'Не удалось изменить избранное',
@@ -126,8 +123,7 @@ class FavoritesController extends GetxController {
       );
 
       favoriteIds.remove(product.id);
-      favoriteProducts.removeWhere((item) => item.id == product.id);
-
+      favoriteProducts.removeWhere((Product item) => item.id == product.id);
       favoriteIds.refresh();
       favoriteProducts.refresh();
 
@@ -136,7 +132,7 @@ class FavoritesController extends GetxController {
         '${product.name} удалён из избранного',
         snackPosition: SnackPosition.BOTTOM,
       );
-    } catch (e) {
+    } catch (_) {
       Get.snackbar(
         'Ошибка',
         'Не удалось удалить из избранного',
@@ -157,7 +153,6 @@ class FavoritesController extends GetxController {
 
       favoriteIds.clear();
       favoriteProducts.clear();
-
       favoriteIds.refresh();
       favoriteProducts.refresh();
 
@@ -166,7 +161,7 @@ class FavoritesController extends GetxController {
         'Избранное очищено',
         snackPosition: SnackPosition.BOTTOM,
       );
-    } catch (e) {
+    } catch (_) {
       Get.snackbar(
         'Ошибка',
         'Не удалось очистить избранное',

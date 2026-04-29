@@ -14,12 +14,47 @@ class ServerApiService {
 
     if (auth) {
       final token = await AuthStorage.getToken();
+
       if (token != null && token.isNotEmpty) {
         headers['Authorization'] = 'Bearer $token';
       }
     }
 
     return headers;
+  }
+
+  static Future<List<Map<String, dynamic>>> getProducts() async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/products'),
+      headers: await _headers(),
+    );
+
+    if (response.statusCode == 200) {
+      final List<dynamic> data = jsonDecode(response.body) as List<dynamic>;
+
+      return data
+          .map((dynamic item) => Map<String, dynamic>.from(item as Map))
+          .toList();
+    }
+
+    throw Exception('Ошибка загрузки товаров: ${response.body}');
+  }
+
+  static Future<List<Map<String, dynamic>>> getPopularProducts() async {
+    final response = await http.get(
+      Uri.parse('$baseUrl/products/popular'),
+      headers: await _headers(),
+    );
+
+    if (response.statusCode == 200) {
+      final List<dynamic> data = jsonDecode(response.body) as List<dynamic>;
+
+      return data
+          .map((dynamic item) => Map<String, dynamic>.from(item as Map))
+          .toList();
+    }
+
+    throw Exception('Ошибка загрузки популярных товаров: ${response.body}');
   }
 
   static Future<Map<String, dynamic>> login({
@@ -35,12 +70,12 @@ class ServerApiService {
       }),
     );
 
-    final data = jsonDecode(response.body);
+    final Map<String, dynamic> data = jsonDecode(response.body);
 
     if (response.statusCode == 200) {
       await AuthStorage.saveAuth(
-        token: data['token'],
-        user: data['user'],
+        token: data['token'] as String,
+        user: Map<String, dynamic>.from(data['user'] as Map),
       );
 
       return data;
@@ -64,12 +99,12 @@ class ServerApiService {
       }),
     );
 
-    final data = jsonDecode(response.body);
+    final Map<String, dynamic> data = jsonDecode(response.body);
 
     if (response.statusCode == 200) {
       await AuthStorage.saveAuth(
-        token: data['token'],
-        user: data['user'],
+        token: data['token'] as String,
+        user: Map<String, dynamic>.from(data['user'] as Map),
       );
 
       return data;
@@ -84,7 +119,7 @@ class ServerApiService {
       headers: await _headers(auth: true),
     );
 
-    final data = jsonDecode(response.body);
+    final Map<String, dynamic> data = jsonDecode(response.body);
 
     if (response.statusCode == 200) {
       return data;
@@ -102,31 +137,5 @@ class ServerApiService {
     } finally {
       await AuthStorage.clear();
     }
-  }
-
-  static Future<List<dynamic>> getProducts() async {
-    final response = await http.get(
-      Uri.parse('$baseUrl/products'),
-      headers: await _headers(),
-    );
-
-    if (response.statusCode == 200) {
-      return jsonDecode(response.body);
-    }
-
-    throw Exception('Ошибка загрузки товаров');
-  }
-
-  static Future<List<dynamic>> getPopularProducts() async {
-    final response = await http.get(
-      Uri.parse('$baseUrl/products/popular'),
-      headers: await _headers(),
-    );
-
-    if (response.statusCode == 200) {
-      return jsonDecode(response.body);
-    }
-
-    throw Exception('Ошибка загрузки популярных товаров');
   }
 }

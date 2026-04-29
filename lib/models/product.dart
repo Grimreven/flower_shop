@@ -8,8 +8,9 @@ class Product {
   final String categoryName;
   final bool inStock;
   final double rating;
+  final int reviewCount;
   final List<String>? care;
-  final List<PriceHistory>? priceHistory;
+  final List<dynamic>? priceHistory;
   final bool isFavorite;
 
   Product({
@@ -22,31 +23,47 @@ class Product {
     required this.categoryName,
     required this.inStock,
     required this.rating,
+    this.reviewCount = 0,
     this.care,
     this.priceHistory,
     this.isFavorite = false,
   });
 
   factory Product.fromJson(Map<String, dynamic> json) {
-    List<String>? careList;
-
-    if (json['care'] != null) {
-      careList = List<String>.from(json['care']);
-    }
-
     return Product(
-      id: json['id'],
-      name: json['name'],
-      description: json['description'] ?? '',
-      price: double.tryParse(json['price'].toString()) ?? 0.0,
-      imageUrl: json['image_url'],
-      categoryId: json['category_id'],
-      categoryName: json['category_name'] ?? '',
-      inStock: json['in_stock'] ?? true,
-      rating: double.tryParse(json['rating'].toString()) ?? 0.0,
-      care: careList,
-      isFavorite: json['is_favorite'] ?? false,
+      id: _toInt(json['id']),
+      name: json['name']?.toString() ?? '',
+      description: json['description']?.toString() ?? '',
+      price: _toDouble(json['price']),
+      imageUrl: (json['imageUrl'] ?? json['image_url'] ?? '').toString(),
+      categoryId: _toInt(json['categoryId'] ?? json['category_id']),
+      categoryName:
+      (json['categoryName'] ?? json['category_name'] ?? '').toString(),
+      inStock: _toBool(json['inStock'] ?? json['in_stock']),
+      rating: _toDouble(json['rating']),
+      reviewCount: _toInt(json['reviewCount'] ?? json['review_count']),
+      care: _toStringList(json['care']),
+      priceHistory: json['priceHistory'] ?? json['price_history'],
+      isFavorite: _toBool(json['isFavorite'] ?? json['is_favorite']),
     );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'name': name,
+      'description': description,
+      'price': price,
+      'image_url': imageUrl,
+      'category_id': categoryId,
+      'category_name': categoryName,
+      'in_stock': inStock,
+      'rating': rating,
+      'review_count': reviewCount,
+      'care': care,
+      'price_history': priceHistory,
+      'is_favorite': isFavorite,
+    };
   }
 
   Product copyWith({
@@ -59,8 +76,9 @@ class Product {
     String? categoryName,
     bool? inStock,
     double? rating,
+    int? reviewCount,
     List<String>? care,
-    List<PriceHistory>? priceHistory,
+    List<dynamic>? priceHistory,
     bool? isFavorite,
   }) {
     return Product(
@@ -73,10 +91,40 @@ class Product {
       categoryName: categoryName ?? this.categoryName,
       inStock: inStock ?? this.inStock,
       rating: rating ?? this.rating,
+      reviewCount: reviewCount ?? this.reviewCount,
       care: care ?? this.care,
       priceHistory: priceHistory ?? this.priceHistory,
       isFavorite: isFavorite ?? this.isFavorite,
     );
+  }
+
+  static int _toInt(dynamic value) {
+    if (value == null) return 0;
+    if (value is int) return value;
+    if (value is double) return value.toInt();
+    return int.tryParse(value.toString()) ?? 0;
+  }
+
+  static double _toDouble(dynamic value) {
+    if (value == null) return 0.0;
+    if (value is double) return value;
+    if (value is int) return value.toDouble();
+    return double.tryParse(value.toString().replaceAll(',', '.')) ?? 0.0;
+  }
+
+  static bool _toBool(dynamic value) {
+    if (value == null) return false;
+    if (value is bool) return value;
+    if (value is int) return value == 1;
+    return value.toString().toLowerCase() == 'true';
+  }
+
+  static List<String>? _toStringList(dynamic value) {
+    if (value == null) return null;
+    if (value is List) {
+      return value.map((item) => item.toString()).toList();
+    }
+    return null;
   }
 }
 
