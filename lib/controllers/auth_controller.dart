@@ -2,6 +2,7 @@ import 'package:get/get.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../api/auth_service.dart';
+import '../api/auth_storage.dart';
 import '../api/local_demo_service.dart';
 import '../models/user.dart';
 import 'favorites_controller.dart';
@@ -32,9 +33,12 @@ class AuthController extends GetxController {
     await LocalDemoService.instance.ensureSeeded();
 
     final SharedPreferences prefs = await SharedPreferences.getInstance();
-    token.value = prefs.getString('token') ?? '';
+    final String? savedToken = await AuthStorage.getToken();
+
+    token.value = savedToken ?? prefs.getString('token') ?? '';
 
     if (token.value.isNotEmpty) {
+      await AuthStorage.saveToken(token.value);
       await getProfile();
       await _favoritesOrNull()?.loadFavorites();
     } else {
@@ -43,17 +47,27 @@ class AuthController extends GetxController {
   }
 
   Future<void> _saveToken(String value) async {
-    final SharedPreferences prefs = await SharedPreferences.getInstance();
-    await prefs.setString('token', value);
+    await AuthStorage.saveToken(value);
     token.value = value;
   }
 
   Future<void> _clearTokenSilently() async {
-    final SharedPreferences prefs = await SharedPreferences.getInstance();
-    await prefs.remove('token');
+    await AuthStorage.clear();
     token.value = '';
     user.value = null;
     _favoritesOrNull()?.clearLocalState();
+  }
+
+  void _safeSnackbar(String title, String message) {
+    Future.delayed(Duration.zero, () {
+      if (Get.context != null) {
+        Get.snackbar(
+          title,
+          message,
+          snackPosition: SnackPosition.BOTTOM,
+        );
+      }
+    });
   }
 
   Future<bool> login(String email, String password) async {
@@ -67,21 +81,22 @@ class AuthController extends GetxController {
         await _saveToken(result['token'].toString());
         await getProfile();
         await _favoritesOrNull()?.loadFavorites();
+
         return true;
       }
 
-      Get.snackbar(
+      _safeSnackbar(
         'Ошибка входа',
         result?['message']?.toString() ?? 'Неизвестная ошибка',
-        snackPosition: SnackPosition.BOTTOM,
       );
+
       return false;
     } catch (e) {
-      Get.snackbar(
+      _safeSnackbar(
         'Ошибка',
         e.toString(),
-        snackPosition: SnackPosition.BOTTOM,
       );
+
       return false;
     }
   }
@@ -98,38 +113,36 @@ class AuthController extends GetxController {
         await _saveToken(result['token'].toString());
         await getProfile();
         await _favoritesOrNull()?.loadFavorites();
+
         return true;
       }
 
-      Get.snackbar(
+      _safeSnackbar(
         'Ошибка регистрации',
         result?['message']?.toString() ?? 'Неизвестная ошибка',
-        snackPosition: SnackPosition.BOTTOM,
       );
+
       return false;
     } catch (e) {
-      Get.snackbar(
+      _safeSnackbar(
         'Ошибка',
         e.toString(),
-        snackPosition: SnackPosition.BOTTOM,
       );
+
       return false;
     }
   }
 
   Future<void> logout() async {
-    final SharedPreferences prefs = await SharedPreferences.getInstance();
-    await prefs.remove('token');
+    await AuthStorage.clear();
 
     token.value = '';
     user.value = null;
-
     _favoritesOrNull()?.clearLocalState();
 
-    Get.snackbar(
+    _safeSnackbar(
       'Выход',
       'Вы успешно вышли',
-      snackPosition: SnackPosition.BOTTOM,
     );
   }
 
@@ -144,41 +157,28 @@ class AuthController extends GetxController {
       );
 
       if (data == null) {
-        Get.snackbar(
-          'Ошибка',
-          'Не удалось загрузить профиль',
-          snackPosition: SnackPosition.BOTTOM,
-        );
         return null;
       }
 
       if (data['authError'] == true) {
         await _clearTokenSilently();
-        Get.snackbar(
+
+        _safeSnackbar(
           'Сессия истекла',
           data['message']?.toString() ?? 'Войдите снова',
-          snackPosition: SnackPosition.BOTTOM,
         );
+
         return null;
       }
 
       if (data['id'] != null) {
         user.value = User.fromJson(data);
+
         return user.value;
       }
 
-      Get.snackbar(
-        'Ошибка',
-        data['message']?.toString() ?? 'Не удалось загрузить профиль',
-        snackPosition: SnackPosition.BOTTOM,
-      );
       return null;
-    } catch (e) {
-      Get.snackbar(
-        'Ошибка',
-        'Не удалось загрузить профиль',
-        snackPosition: SnackPosition.BOTTOM,
-      );
+    } catch (_) {
       return null;
     }
   }
@@ -195,41 +195,28 @@ class AuthController extends GetxController {
       );
 
       if (data == null) {
-        Get.snackbar(
-          'Ошибка',
-          'Не удалось обновить профиль',
-          snackPosition: SnackPosition.BOTTOM,
-        );
         return null;
       }
 
       if (data['authError'] == true) {
         await _clearTokenSilently();
-        Get.snackbar(
+
+        _safeSnackbar(
           'Сессия истекла',
           data['message']?.toString() ?? 'Войдите снова',
-          snackPosition: SnackPosition.BOTTOM,
         );
+
         return null;
       }
 
       if (data['id'] != null) {
         user.value = User.fromJson(data);
+
         return user.value;
       }
 
-      Get.snackbar(
-        'Ошибка',
-        data['message']?.toString() ?? 'Не удалось обновить профиль',
-        snackPosition: SnackPosition.BOTTOM,
-      );
       return null;
-    } catch (e) {
-      Get.snackbar(
-        'Ошибка',
-        'Не удалось обновить профиль',
-        snackPosition: SnackPosition.BOTTOM,
-      );
+    } catch (_) {
       return null;
     }
   }
@@ -244,7 +231,7 @@ class AuthController extends GetxController {
       );
 
       user.value = currentUser.copyWith(
-        loyaltyPoints: newPoints.toInt(),
+        loyaltyPoints: newPoints,
       );
     }
   }

@@ -14,6 +14,7 @@ import '../models/order_model.dart';
 
 class OrderController extends GetxController {
   final AuthController authController;
+
   late OrderService _orderService;
 
   final RxList<OrderModel> orders = <OrderModel>[].obs;
@@ -31,10 +32,13 @@ class OrderController extends GetxController {
   @override
   void onInit() {
     super.onInit();
-    _orderService = OrderService(token: authController.token.value);
 
-    ever<String?>(authController.token, (String? newToken) {
-      if (newToken != null && newToken.isNotEmpty) {
+    _orderService = OrderService(
+      token: authController.token.value,
+    );
+
+    ever<String>(authController.token, (String newToken) {
+      if (newToken.isNotEmpty) {
         _orderService = OrderService(token: newToken);
       }
     });
@@ -55,23 +59,48 @@ class OrderController extends GetxController {
     }
 
     try {
-      final List<Map<String, dynamic>> itemsMaps =
-      items.map((e) => e.toJson()).toList();
+      final List<Map<String, dynamic>> itemsMaps = items.map((model.CartItem e) {
+        final Map<String, dynamic> json = e.toJson();
+
+        return <String, dynamic>{
+          ...json,
+          'product_id': e.product.id,
+          'productId': e.product.id,
+          'quantity': e.quantity,
+        };
+      }).toList();
 
       await _orderService.createOrder(
         itemsMaps: itemsMaps,
-        checkoutData: {
+        checkoutData: <String, dynamic>{
           ...summary.toJson(),
           'payment_method': paymentMethod,
+          'paymentMethod': paymentMethod,
           'payment_status': paymentStatus,
+          'paymentStatus': paymentStatus,
           'card_mask': cardMask,
+          'cardMask': cardMask,
+          'full_address': deliveryAddress,
+          'fullAddress': deliveryAddress,
           'delivery_address': deliveryAddress,
+          'deliveryAddress': deliveryAddress,
+          'recipient_name': authController.user.value?.name ?? '',
+          'recipientName': authController.user.value?.name ?? '',
+          'phone': authController.user.value?.phone ?? '',
           'recipient_comment': recipientComment,
+          'recipientComment': recipientComment,
+          'comment': recipientComment,
           'promo_code': promoCode,
+          'promoCode': promoCode,
+          'delivery_price': summary.deliveryCost,
+          'deliveryPrice': summary.deliveryCost,
+          'payment_amount': summary.payableTotal,
+          'paymentAmount': summary.payableTotal,
         },
       );
 
       final ctrl.CartController cartController = Get.find<ctrl.CartController>();
+
       await cartController.clearLocalOnly();
       await authController.getProfile();
       await fetchUserOrders();
@@ -81,7 +110,10 @@ class OrderController extends GetxController {
         initializeTrackingForOrder(orders.first);
       }
     } catch (e) {
-      Get.snackbar('Ошибка', 'Не удалось оформить заказ: $e');
+      Get.snackbar(
+        'Ошибка',
+        'Не удалось оформить заказ: $e',
+      );
       rethrow;
     }
   }
@@ -93,19 +125,23 @@ class OrderController extends GetxController {
 
     try {
       final List<OrderModel> fetched = await _orderService.getUserOrders();
+
       orders.assignAll(fetched);
 
       for (final OrderModel order in fetched) {
         _ensureTrackingInitialized(order);
       }
     } catch (e) {
-      Get.snackbar('Ошибка', 'Не удалось загрузить заказы: $e');
+      Get.snackbar(
+        'Ошибка',
+        'Не удалось загрузить заказы: $e',
+      );
     }
   }
 
   OrderModel? findOrderById(int orderId) {
     try {
-      return orders.firstWhere((order) => order.id == orderId);
+      return orders.firstWhere((OrderModel order) => order.id == orderId);
     } catch (_) {
       return null;
     }
@@ -160,7 +196,10 @@ class OrderController extends GetxController {
 
     await _orderService.updateOrderStatus(orderId, newStatus);
 
-    final int orderIndex = orders.indexWhere((order) => order.id == orderId);
+    final int orderIndex = orders.indexWhere(
+          (OrderModel order) => order.id == orderId,
+    );
+
     if (orderIndex == -1) {
       return;
     }
@@ -203,36 +242,39 @@ class OrderController extends GetxController {
       return;
     }
 
-    _trackingTimers[order.id] =
-        Timer.periodic(const Duration(seconds: 4), (Timer timer) async {
-          final int index = trackingStepByOrderId[order.id] ?? 0;
+    _trackingTimers[order.id] = Timer.periodic(
+      const Duration(seconds: 4),
+          (Timer timer) async {
+        final int index = trackingStepByOrderId[order.id] ?? 0;
 
-          if (index < OrderTrackingHelper.steps.length - 1) {
-            final int nextIndex = index + 1;
-            trackingStepByOrderId[order.id] = nextIndex;
+        if (index < OrderTrackingHelper.steps.length - 1) {
+          final int nextIndex = index + 1;
 
-            if (nextIndex == 1) {
-              trackingEtaByOrderId[order.id] =
-                  DateTime.now().add(const Duration(minutes: 30));
-            } else if (nextIndex == 2) {
-              trackingEtaByOrderId[order.id] =
-                  DateTime.now().add(const Duration(minutes: 15));
-            } else if (nextIndex == 3) {
-              trackingEtaByOrderId[order.id] = DateTime.now();
-              timer.cancel();
-              _trackingTimers.remove(order.id);
-            }
+          trackingStepByOrderId[order.id] = nextIndex;
 
-            trackingStepByOrderId.refresh();
-            trackingEtaByOrderId.refresh();
-
-            await _persistTrackingStep(order.id, nextIndex);
-            await _notifyAboutStatusChange(order.id, nextIndex);
-          } else {
+          if (nextIndex == 1) {
+            trackingEtaByOrderId[order.id] =
+                DateTime.now().add(const Duration(minutes: 30));
+          } else if (nextIndex == 2) {
+            trackingEtaByOrderId[order.id] =
+                DateTime.now().add(const Duration(minutes: 15));
+          } else if (nextIndex == 3) {
+            trackingEtaByOrderId[order.id] = DateTime.now();
             timer.cancel();
             _trackingTimers.remove(order.id);
           }
-        });
+
+          trackingStepByOrderId.refresh();
+          trackingEtaByOrderId.refresh();
+
+          await _persistTrackingStep(order.id, nextIndex);
+          await _notifyAboutStatusChange(order.id, nextIndex);
+        } else {
+          timer.cancel();
+          _trackingTimers.remove(order.id);
+        }
+      },
+    );
   }
 
   Future<void> _notifyAboutStatusChange(int orderId, int stepIndex) async {
@@ -274,11 +316,13 @@ class OrderController extends GetxController {
 
   String getTrackingStatusTitle(int orderId) {
     final int index = getTrackingStepIndex(orderId);
+
     return OrderTrackingHelper.titleByIndex(index);
   }
 
   String getTrackingStatusMessage(int orderId) {
     final int index = getTrackingStepIndex(orderId);
+
     return OrderTrackingHelper.messageByIndex(index);
   }
 
@@ -301,6 +345,7 @@ class OrderController extends GetxController {
 
   bool isOrderDelivered(int orderId) {
     final int index = getTrackingStepIndex(orderId);
+
     return index >= OrderTrackingHelper.steps.length - 1;
   }
 
@@ -309,7 +354,9 @@ class OrderController extends GetxController {
     for (final Timer timer in _trackingTimers.values) {
       timer.cancel();
     }
+
     _trackingTimers.clear();
+
     super.onClose();
   }
 }

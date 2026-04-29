@@ -1,6 +1,8 @@
+import '../config/app_config.dart';
 import '../controllers/auth_controller.dart';
 import '../models/product.dart';
 import 'local_demo_service.dart';
+import 'server_api_service.dart';
 
 class CartService {
   final AuthController authController;
@@ -11,26 +13,46 @@ class CartService {
   String get _token => authController.token.value;
 
   Future<List<CartItemModel>> fetchCart() async {
-    final List<Map<String, dynamic>> data = await _localDemoService.getCart(_token);
+    final List<Map<String, dynamic>> data = AppConfig.useBackend
+        ? await ServerApiService.getCart()
+        : await _localDemoService.getCart(_token);
 
-    return data
-        .map((e) => CartItemModel.fromJson(e))
-        .toList();
+    return data.map((Map<String, dynamic> e) => CartItemModel.fromJson(e)).toList();
   }
 
   Future<void> addToCart(int productId, int quantity) async {
+    if (AppConfig.useBackend) {
+      await ServerApiService.addToCart(productId, quantity);
+      return;
+    }
+
     await _localDemoService.addToCart(_token, productId, quantity);
   }
 
   Future<void> updateQuantity(int productId, int quantity) async {
+    if (AppConfig.useBackend) {
+      await ServerApiService.updateCart(productId, quantity);
+      return;
+    }
+
     await _localDemoService.updateCart(_token, productId, quantity);
   }
 
   Future<void> removeItem(int productId) async {
+    if (AppConfig.useBackend) {
+      await ServerApiService.removeFromCart(productId);
+      return;
+    }
+
     await _localDemoService.removeFromCart(_token, productId);
   }
 
   Future<void> clearCart() async {
+    if (AppConfig.useBackend) {
+      await ServerApiService.clearCart();
+      return;
+    }
+
     await _localDemoService.clearCart(_token);
   }
 }
@@ -47,43 +69,29 @@ class CartItemModel {
   });
 
   factory CartItemModel.fromJson(Map<String, dynamic> json) {
-    double parseDouble(dynamic v) {
-      if (v == null) return 0.0;
-      if (v is num) return v.toDouble();
-      if (v is String) {
-        final cleaned = v.replaceAll(',', '.');
-        return double.tryParse(cleaned) ?? 0.0;
-      }
-      return 0.0;
-    }
-
-    int parseInt(dynamic v) {
-      if (v == null) return 0;
-      if (v is int) return v;
-      if (v is num) return v.toInt();
-      if (v is String) return int.tryParse(v) ?? 0;
-      return 0;
-    }
-
-    final product = Product(
-      id: parseInt(json['product_id'] ?? json['id']),
-      name: json['name']?.toString() ?? '',
-      description: json['description']?.toString() ?? '',
-      price: parseDouble(json['price']),
-      imageUrl: json['image_url']?.toString() ?? '',
-      categoryId: parseInt(json['category_id']),
-      categoryName: json['category_name']?.toString() ?? '',
-      inStock: json['in_stock'] == null
-          ? true
-          : (json['in_stock'] == true || json['in_stock'] == 1),
-      rating: parseDouble(json['rating']),
-      care: (json['care'] is List) ? List<String>.from(json['care']) : null,
-    );
-
     return CartItemModel(
-      id: parseInt(json['id']),
-      quantity: parseInt(json['quantity']),
-      product: product,
+      id: _parseInt(json['id']),
+      quantity: _parseInt(json['quantity']),
+      product: Product.fromJson({
+        'id': json['product_id'] ?? json['id'],
+        'name': json['name'],
+        'description': json['description'],
+        'price': json['price'],
+        'image_url': json['image_url'],
+        'category_id': json['category_id'],
+        'category_name': json['category_name'],
+        'in_stock': json['in_stock'],
+        'rating': json['rating'],
+        'review_count': json['review_count'],
+        'care': json['care'],
+      }),
     );
+  }
+
+  static int _parseInt(dynamic value) {
+    if (value == null) return 0;
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return int.tryParse(value.toString()) ?? 0;
   }
 }

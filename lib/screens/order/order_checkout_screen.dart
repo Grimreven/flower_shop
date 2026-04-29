@@ -236,6 +236,7 @@ class _OrderCheckoutScreenState extends State<OrderCheckoutScreen> {
     }
 
     final UserAddress? selectedAddress = addressBookController.selectedAddress;
+
     final String deliveryAddress = deliveryMethod == DeliveryMethod.pickup
         ? 'Самовывоз'
         : (selectedAddress?.fullAddress.trim() ?? '');
@@ -281,6 +282,7 @@ class _OrderCheckoutScreenState extends State<OrderCheckoutScreen> {
       );
 
       if (!mounted) return;
+
       Get.offAll(() => const OrderSuccessScreen());
     } catch (e) {
       Get.snackbar(

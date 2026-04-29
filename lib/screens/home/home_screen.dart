@@ -21,16 +21,17 @@ class _HomeScreenState extends State<HomeScreen> {
   final CartController cartController = Get.find<CartController>();
   final AuthController authController = Get.find<AuthController>();
 
-  List<Product> allProducts = [];
-  List<Product> popularProducts = [];
-  List<Product> newProducts = [];
-  List<Product> filteredProducts = [];
+  List<Product> allProducts = <Product>[];
+  List<Product> popularProducts = <Product>[];
+  List<Product> newProducts = <Product>[];
+  List<Product> filteredProducts = <Product>[];
 
   String searchQuery = '';
-  List<String> selectedCategories = [];
+  List<String> selectedCategories = <String>[];
   RangeValues priceRange = const RangeValues(0, 10000);
   bool inStockOnly = false;
   bool isLoading = true;
+  String? loadError;
 
   @override
   void initState() {
@@ -39,14 +40,22 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _loadProducts() async {
-    setState(() => isLoading = true);
+    if (!mounted) return;
+
+    setState(() {
+      isLoading = true;
+      loadError = null;
+    });
 
     try {
       final List<Product> all = await ApiService.fetchAllProducts();
       final List<Product> popular = await ApiService.fetchPopularProducts();
+
       final List<Product> newItems = all.length >= 4
           ? all.sublist(all.length - 4).reversed.toList()
           : all.reversed.toList();
+
+      if (!mounted) return;
 
       setState(() {
         allProducts = all;
@@ -55,39 +64,60 @@ class _HomeScreenState extends State<HomeScreen> {
         filteredProducts = all;
         isLoading = false;
       });
-    } catch (_) {
-      setState(() => isLoading = false);
+
+      debugPrint('PRODUCTS LOADED: ${all.length}');
+      debugPrint('POPULAR PRODUCTS LOADED: ${popular.length}');
+    } catch (e, s) {
+      debugPrint('LOAD PRODUCTS ERROR: $e');
+      debugPrint('$s');
+
+      if (!mounted) return;
+
+      setState(() {
+        isLoading = false;
+        loadError = e.toString();
+        allProducts = <Product>[];
+        popularProducts = <Product>[];
+        newProducts = <Product>[];
+        filteredProducts = <Product>[];
+      });
     }
   }
 
   void _applyFilters() {
-    List<Product> temp = allProducts;
+    List<Product> temp = List<Product>.from(allProducts);
 
     if (searchQuery.isNotEmpty) {
       temp = temp
           .where(
-            (Product p) =>
-        p.name.toLowerCase().contains(searchQuery.toLowerCase()) ||
-            p.description.toLowerCase().contains(searchQuery.toLowerCase()),
+            (Product product) =>
+        product.name.toLowerCase().contains(searchQuery.toLowerCase()) ||
+            product.description
+                .toLowerCase()
+                .contains(searchQuery.toLowerCase()),
       )
           .toList();
     }
 
     if (selectedCategories.isNotEmpty) {
       temp = temp
-          .where((Product p) => selectedCategories.contains(p.categoryName))
+          .where(
+            (Product product) =>
+            selectedCategories.contains(product.categoryName),
+      )
           .toList();
     }
 
     temp = temp
         .where(
-          (Product p) =>
-      p.price >= priceRange.start && p.price <= priceRange.end,
+          (Product product) =>
+      product.price >= priceRange.start &&
+          product.price <= priceRange.end,
     )
         .toList();
 
     if (inStockOnly) {
-      temp = temp.where((Product p) => p.inStock).toList();
+      temp = temp.where((Product product) => product.inStock).toList();
     }
 
     setState(() {
@@ -136,23 +166,18 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
 
-    try {
-      _openProductDetail(selectedProduct as Product);
-    } catch (_) {
-      Get.snackbar(
-        'Умный букет',
-        'Букет подобран, но не удалось открыть карточку товара',
-        snackPosition: SnackPosition.BOTTOM,
-      );
-    }
+    Get.snackbar(
+      'Умный букет',
+      'Букет подобран, но не удалось открыть карточку товара',
+      snackPosition: SnackPosition.BOTTOM,
+    );
   }
 
   Widget _buildHeader() {
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
     final Color onSurface = Theme.of(context).colorScheme.onSurface;
-    final Color muted = isDark
-        ? AppColors.darkMutedForeground
-        : AppColors.mutedForeground;
+    final Color muted =
+    isDark ? AppColors.darkMutedForeground : AppColors.mutedForeground;
     final Color border = isDark ? AppColors.darkBorder : AppColors.border;
 
     return Container(
@@ -162,13 +187,13 @@ class _HomeScreenState extends State<HomeScreen> {
         gradient: isDark
             ? AppColors.darkCardGradient
             : const LinearGradient(
-          colors: [Color(0xFFFFEEF2), Color(0xFFFFF8FA)],
+          colors: <Color>[Color(0xFFFFEEF2), Color(0xFFFFF8FA)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(24),
         border: Border.all(color: border),
-        boxShadow: [
+        boxShadow: <BoxShadow>[
           BoxShadow(
             color: isDark
                 ? AppColors.purple.withValues(alpha: 0.08)
@@ -179,11 +204,11 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
       child: Row(
-        children: [
+        children: <Widget>[
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
+              children: <Widget>[
                 Text(
                   'Подберите идеальный букет',
                   style: TextStyle(
@@ -242,13 +267,15 @@ class _HomeScreenState extends State<HomeScreen> {
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
     final Color cardColor = Theme.of(context).cardColor;
     final Color onSurface = Theme.of(context).colorScheme.onSurface;
-    final Color muted = isDark
-        ? AppColors.darkMutedForeground
-        : AppColors.mutedForeground;
+    final Color muted =
+    isDark ? AppColors.darkMutedForeground : AppColors.mutedForeground;
     final Color border = isDark ? AppColors.darkBorder : AppColors.border;
 
-    final List<String> categories =
-    allProducts.map((Product p) => p.categoryName).toSet().toList();
+    final List<String> categories = allProducts
+        .map((Product product) => product.categoryName)
+        .where((String category) => category.trim().isNotEmpty)
+        .toSet()
+        .toList();
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16),
@@ -258,7 +285,7 @@ class _HomeScreenState extends State<HomeScreen> {
         color: isDark ? null : cardColor,
         borderRadius: BorderRadius.circular(22),
         border: Border.all(color: border),
-        boxShadow: [
+        boxShadow: <BoxShadow>[
           BoxShadow(
             color: isDark
                 ? AppColors.purple.withValues(alpha: 0.08)
@@ -270,7 +297,7 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+        children: <Widget>[
           Text(
             'Фильтры',
             style: TextStyle(
@@ -283,25 +310,24 @@ class _HomeScreenState extends State<HomeScreen> {
           Wrap(
             spacing: 8,
             runSpacing: 8,
-            children: [
+            children: <Widget>[
               ...categories.map(
-                    (String c) => FilterChip(
+                    (String category) => FilterChip(
                   label: Text(
-                    c,
+                    category,
                     style: TextStyle(
-                      color: selectedCategories.contains(c)
+                      color: selectedCategories.contains(category)
                           ? Colors.white
                           : onSurface,
                     ),
                   ),
-                  selected: selectedCategories.contains(c),
-                  selectedColor:
-                  isDark ? AppColors.purple : AppColors.primary,
+                  selected: selectedCategories.contains(category),
+                  selectedColor: isDark ? AppColors.purple : AppColors.primary,
                   backgroundColor:
                   isDark ? AppColors.darkSurfaceElevated : Colors.white,
                   side: BorderSide(color: border),
                   checkmarkColor: Colors.white,
-                  onSelected: (_) => _toggleCategory(c),
+                  onSelected: (_) => _toggleCategory(category),
                 ),
               ),
               FilterChip(
@@ -320,8 +346,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 onSelected: (_) {
                   setState(() {
                     inStockOnly = !inStockOnly;
-                    _applyFilters();
                   });
+                  _applyFilters();
                 },
               ),
               TextButton(
@@ -357,13 +383,15 @@ class _HomeScreenState extends State<HomeScreen> {
               '${priceRange.end.toStringAsFixed(0)} ₽',
             ),
             onChanged: (RangeValues range) {
-              setState(() => priceRange = range);
+              setState(() {
+                priceRange = range;
+              });
               _applyFilters();
             },
           ),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
+            children: <Widget>[
               Text(
                 '${priceRange.start.toStringAsFixed(0)} ₽',
                 style: TextStyle(
@@ -391,7 +419,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 22, 16, 12),
       child: Row(
-        children: [
+        children: <Widget>[
           Expanded(
             child: Text(
               title,
@@ -408,10 +436,9 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildSection(String title, List<Product> products) {
-    final List<Product> displayProducts =
-    filteredProducts.isEmpty && searchQuery.isNotEmpty
-        ? []
-        : products.where((Product p) => filteredProducts.contains(p)).toList();
+    final List<Product> displayProducts = products
+        .where((Product product) => filteredProducts.contains(product))
+        .toList();
 
     if (displayProducts.isEmpty) {
       return const SizedBox.shrink();
@@ -419,7 +446,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
+      children: <Widget>[
         _sectionTitle(title),
         GridView.builder(
           physics: const NeverScrollableScrollPhysics(),
@@ -470,11 +497,9 @@ class _HomeScreenState extends State<HomeScreen> {
     final Color border = isDark ? AppColors.darkBorder : AppColors.border;
     final Color fillColor =
     isDark ? AppColors.darkSurfaceElevated : Theme.of(context).cardColor;
-    final Color hintColor = isDark
-        ? AppColors.darkMutedForeground
-        : AppColors.mutedForeground;
-    final Color iconColor =
-    isDark ? AppColors.purpleLight : AppColors.primary;
+    final Color hintColor =
+    isDark ? AppColors.darkMutedForeground : AppColors.mutedForeground;
+    final Color iconColor = isDark ? AppColors.purpleLight : AppColors.primary;
 
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 8, 16, 8),
@@ -483,7 +508,9 @@ class _HomeScreenState extends State<HomeScreen> {
           color: Theme.of(context).colorScheme.onSurface,
         ),
         onChanged: (String value) {
-          setState(() => searchQuery = value);
+          setState(() {
+            searchQuery = value;
+          });
           _applyFilters();
         },
         decoration: InputDecoration(
@@ -500,7 +527,9 @@ class _HomeScreenState extends State<HomeScreen> {
               color: hintColor,
             ),
             onPressed: () {
-              setState(() => searchQuery = '');
+              setState(() {
+                searchQuery = '';
+              });
               _applyFilters();
             },
           )
@@ -531,13 +560,76 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Widget _buildErrorBlock() {
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color muted =
+    isDark ? AppColors.darkMutedForeground : AppColors.mutedForeground;
+
+    if (loadError == null) {
+      return const SizedBox.shrink();
+    }
+
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: Center(
+        child: Column(
+          children: <Widget>[
+            Text(
+              'Не удалось загрузить товары',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 16,
+                color: muted,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              loadError!,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 12,
+                color: muted,
+              ),
+            ),
+            const SizedBox(height: 12),
+            ElevatedButton(
+              onPressed: _loadProducts,
+              child: const Text('Повторить'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyBlock() {
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color muted =
+    isDark ? AppColors.darkMutedForeground : AppColors.mutedForeground;
+
+    if (loadError != null || filteredProducts.isNotEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: Center(
+        child: Text(
+          'Товары не найдены',
+          style: TextStyle(
+            fontSize: 16,
+            color: muted,
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
     final Color bg = Theme.of(context).scaffoldBackgroundColor;
-    final Color muted = isDark
-        ? AppColors.darkMutedForeground
-        : AppColors.mutedForeground;
 
     return Scaffold(
       backgroundColor: bg,
@@ -545,7 +637,7 @@ class _HomeScreenState extends State<HomeScreen> {
         decoration: BoxDecoration(
           gradient: isDark
               ? const LinearGradient(
-            colors: [
+            colors: <Color>[
               AppColors.darkBackground,
               AppColors.darkBackgroundSecondary,
             ],
@@ -565,30 +657,20 @@ class _HomeScreenState extends State<HomeScreen> {
             onRefresh: _loadProducts,
             color: isDark ? AppColors.purple : AppColors.primary,
             child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.only(bottom: 24),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
+                children: <Widget>[
                   _buildHeader(),
                   _buildSmartBouquetBlock(),
                   _buildSearchBar(),
-                  _buildFilters(),
+                  if (allProducts.isNotEmpty) _buildFilters(),
                   _buildSection('Популярное', popularProducts),
                   _buildSection('Новинки', newProducts),
                   _buildSection('Все товары', allProducts),
-                  if (filteredProducts.isEmpty)
-                    Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Center(
-                        child: Text(
-                          'Товары не найдены',
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: muted,
-                          ),
-                        ),
-                      ),
-                    ),
+                  _buildErrorBlock(),
+                  _buildEmptyBlock(),
                 ],
               ),
             ),

@@ -44,6 +44,13 @@ function authenticateToken(req, res, next) {
   }
 }
 
+app.get("/", (req, res) => {
+  res.json({
+    status: "ok",
+    message: "Flower Shop API is running",
+  });
+});
+
 app.get("/health", async (req, res) => {
   try {
     const result = await pool.query("SELECT NOW()");
@@ -82,19 +89,33 @@ app.post("/register", async (req, res) => {
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
+    const roleResult = await pool.query(
+      "SELECT id FROM roles WHERE name = $1 LIMIT 1",
+      ["customer"]
+    );
+
+    const roleId = roleResult.rows.length > 0 ? roleResult.rows[0].id : null;
+
+    const levelResult = await pool.query(
+      "SELECT id FROM loyalty_levels WHERE name = $1 LIMIT 1",
+      ["Bronze"]
+    );
+
+    const levelId = levelResult.rows.length > 0 ? levelResult.rows[0].id : null;
+
     const result = await pool.query(
-      `INSERT INTO customers (name, email, password_hash)
-       VALUES ($1, $2, $3)
-       RETURNING id, name, email`,
-      [name, email, hashedPassword]
+      `INSERT INTO customers (name, email, password_hash, role_id)
+       VALUES ($1, $2, $3, $4)
+       RETURNING id, name, email, phone`,
+      [name, email, hashedPassword, roleId]
     );
 
     const user = result.rows[0];
 
     await pool.query(
-      `INSERT INTO loyalty_accounts (user_id, points, level, total_spent)
+      `INSERT INTO loyalty_accounts (user_id, points, total_spent, level_id)
        VALUES ($1, $2, $3, $4)`,
-      [user.id, 0, "Bronze", 0]
+      [user.id, 0, 0, levelId]
     );
 
     const token = jwt.sign(
@@ -106,7 +127,7 @@ app.post("/register", async (req, res) => {
     res.json({ user, token });
   } catch (err) {
     console.error("Ошибка POST /register:", err);
-    res.status(500).json({ message: "Ошибка сервера" });
+    res.status(500).json({ message: "Ошибка сервера", error: err.message });
   }
 });
 
@@ -119,7 +140,7 @@ app.post("/login", async (req, res) => {
 
   try {
     const result = await pool.query(
-      "SELECT id, name, email, password_hash FROM customers WHERE email = $1",
+      "SELECT id, name, email, password_hash, phone FROM customers WHERE email = $1",
       [email]
     );
 
@@ -145,12 +166,13 @@ app.post("/login", async (req, res) => {
         id: user.id,
         name: user.name,
         email: user.email,
+        phone: user.phone,
       },
       token,
     });
   } catch (err) {
     console.error("Ошибка POST /login:", err);
-    res.status(500).json({ message: "Ошибка сервера" });
+    res.status(500).json({ message: "Ошибка сервера", error: err.message });
   }
 });
 
@@ -164,14 +186,13 @@ app.get("/profile", authenticateToken, async (req, res) => {
          c.name,
          c.email,
          c.phone,
-         c.address,
          COALESCE(l.points, 0) AS loyalty_points,
          COALESCE(l.total_spent, 0) AS total_spent,
-         COALESCE(l.level, 'Bronze') AS loyalty_level,
+         COALESCE(levels.name, 'Bronze') AS loyalty_level,
          COALESCE(levels.color_hex, '#CD7F32') AS loyalty_color
        FROM customers c
        LEFT JOIN loyalty_accounts l ON l.user_id = c.id
-       LEFT JOIN loyalty_levels levels ON levels.name = l.level
+       LEFT JOIN loyalty_levels levels ON levels.id = l.level_id
        WHERE c.id = $1`,
       [userId]
     );
@@ -183,21 +204,21 @@ app.get("/profile", authenticateToken, async (req, res) => {
     res.json(result.rows[0]);
   } catch (err) {
     console.error("Ошибка GET /profile:", err);
-    res.status(500).json({ message: "Ошибка сервера" });
+    res.status(500).json({ message: "Ошибка сервера", error: err.message });
   }
 });
 
 app.put("/profile", authenticateToken, async (req, res) => {
   const userId = req.user.id;
-  const { name, email, phone, address } = req.body;
+  const { name, email, phone } = req.body;
 
   try {
     const result = await pool.query(
       `UPDATE customers
-       SET name = $1, email = $2, phone = $3, address = $4
-       WHERE id = $5
-       RETURNING id, name, email, phone, address`,
-      [name, email, phone, address, userId]
+       SET name = $1, email = $2, phone = $3
+       WHERE id = $4
+       RETURNING id, name, email, phone`,
+      [name, email, phone, userId]
     );
 
     if (result.rows.length === 0) {
@@ -207,7 +228,7 @@ app.put("/profile", authenticateToken, async (req, res) => {
     res.json(result.rows[0]);
   } catch (err) {
     console.error("Ошибка PUT /profile:", err);
-    res.status(500).json({ message: "Ошибка сервера" });
+    res.status(500).json({ message: "Ошибка сервера", error: err.message });
   }
 });
 
@@ -227,7 +248,7 @@ app.get("/products", async (req, res) => {
     res.json(result.rows);
   } catch (err) {
     console.error("Ошибка GET /products:", err);
-    res.status(500).json({ message: "Ошибка сервера" });
+    res.status(500).json({ message: "Ошибка сервера", error: err.message });
   }
 });
 
@@ -244,7 +265,7 @@ app.get("/products/popular", async (req, res) => {
     res.json(result.rows);
   } catch (err) {
     console.error("Ошибка GET /products/popular:", err);
-    res.status(500).json({ message: "Ошибка сервера" });
+    res.status(500).json({ message: "Ошибка сервера", error: err.message });
   }
 });
 
@@ -262,7 +283,7 @@ app.get("/products/:id/reviews", async (req, res) => {
     res.json(result.rows);
   } catch (err) {
     console.error("Ошибка GET /products/:id/reviews:", err);
-    res.status(500).json({ message: "Ошибка сервера" });
+    res.status(500).json({ message: "Ошибка сервера", error: err.message });
   }
 });
 
@@ -272,7 +293,7 @@ app.get("/products/:id/price-history", async (req, res) => {
   try {
     const result = await pool.query(
       `SELECT price, changed_at
-       FROM product_prices_history
+       FROM product_price_history
        WHERE product_id = $1
        ORDER BY changed_at ASC`,
       [productId]
@@ -281,7 +302,7 @@ app.get("/products/:id/price-history", async (req, res) => {
     res.json(result.rows);
   } catch (err) {
     console.error("Ошибка GET /products/:id/price-history:", err);
-    res.status(500).json({ message: "Ошибка сервера" });
+    res.status(500).json({ message: "Ошибка сервера", error: err.message });
   }
 });
 
@@ -319,7 +340,9 @@ app.get("/cart", authenticateToken, async (req, res) => {
          p.category_id,
          c.name AS category_name,
          p.rating,
-         p.in_stock
+         p.in_stock,
+         p.review_count,
+         p.care
        FROM cart_items ci
        JOIN products p ON p.id = ci.product_id
        LEFT JOIN categories c ON c.id = p.category_id
@@ -331,7 +354,7 @@ app.get("/cart", authenticateToken, async (req, res) => {
     res.json(items.rows);
   } catch (err) {
     console.error("Ошибка GET /cart:", err);
-    res.status(500).json({ message: "Ошибка сервера" });
+    res.status(500).json({ message: "Ошибка сервера", error: err.message });
   }
 });
 
@@ -379,7 +402,7 @@ app.post("/cart", authenticateToken, async (req, res) => {
     res.json({ message: "Товар добавлен в корзину" });
   } catch (err) {
     console.error("Ошибка POST /cart:", err);
-    res.status(500).json({ message: "Ошибка сервера" });
+    res.status(500).json({ message: "Ошибка сервера", error: err.message });
   }
 });
 
@@ -407,7 +430,7 @@ app.put("/cart/:product_id", authenticateToken, async (req, res) => {
     res.json({ message: "Количество обновлено" });
   } catch (err) {
     console.error("Ошибка PUT /cart:", err);
-    res.status(500).json({ message: "Ошибка сервера" });
+    res.status(500).json({ message: "Ошибка сервера", error: err.message });
   }
 });
 
@@ -434,7 +457,7 @@ app.delete("/cart/:product_id", authenticateToken, async (req, res) => {
     res.json({ message: "Товар удалён из корзины" });
   } catch (err) {
     console.error("Ошибка DELETE /cart:", err);
-    res.status(500).json({ message: "Ошибка сервера" });
+    res.status(500).json({ message: "Ошибка сервера", error: err.message });
   }
 });
 
@@ -457,13 +480,86 @@ app.delete("/cart", authenticateToken, async (req, res) => {
     res.json({ message: "Корзина очищена" });
   } catch (err) {
     console.error("Ошибка DELETE /cart:", err);
-    res.status(500).json({ message: "Ошибка сервера" });
+    res.status(500).json({ message: "Ошибка сервера", error: err.message });
+  }
+});
+
+app.get("/favorites", authenticateToken, async (req, res) => {
+  const userId = req.user.id;
+
+  try {
+    const result = await pool.query(
+      `SELECT product_id
+       FROM favorites
+       WHERE user_id = $1
+       ORDER BY created_at DESC`,
+      [userId]
+    );
+
+    res.json(result.rows.map((row) => row.product_id));
+  } catch (err) {
+    console.error("Ошибка GET /favorites:", err);
+    res.status(500).json({ message: "Ошибка сервера", error: err.message });
+  }
+});
+
+app.post("/favorites/:product_id", authenticateToken, async (req, res) => {
+  const userId = req.user.id;
+  const productId = Number(req.params.product_id);
+
+  try {
+    await pool.query(
+      `INSERT INTO favorites (user_id, product_id)
+       VALUES ($1, $2)
+       ON CONFLICT (user_id, product_id) DO NOTHING`,
+      [userId, productId]
+    );
+
+    res.json({ message: "Товар добавлен в избранное" });
+  } catch (err) {
+    console.error("Ошибка POST /favorites:", err);
+    res.status(500).json({ message: "Ошибка сервера", error: err.message });
+  }
+});
+
+app.delete("/favorites/:product_id", authenticateToken, async (req, res) => {
+  const userId = req.user.id;
+  const productId = Number(req.params.product_id);
+
+  try {
+    await pool.query(
+      `DELETE FROM favorites
+       WHERE user_id = $1 AND product_id = $2`,
+      [userId, productId]
+    );
+
+    res.json({ message: "Товар удалён из избранного" });
+  } catch (err) {
+    console.error("Ошибка DELETE /favorites:", err);
+    res.status(500).json({ message: "Ошибка сервера", error: err.message });
+  }
+});
+
+app.delete("/favorites", authenticateToken, async (req, res) => {
+  const userId = req.user.id;
+
+  try {
+    await pool.query(
+      `DELETE FROM favorites
+       WHERE user_id = $1`,
+      [userId]
+    );
+
+    res.json({ message: "Избранное очищено" });
+  } catch (err) {
+    console.error("Ошибка DELETE /favorites:", err);
+    res.status(500).json({ message: "Ошибка сервера", error: err.message });
   }
 });
 
 app.post("/orders", authenticateToken, async (req, res) => {
   const userId = req.user.id;
-  const { items } = req.body;
+  const { items, checkout } = req.body;
 
   if (!items || !Array.isArray(items) || items.length === 0) {
     return res.status(400).json({ message: "Нет товаров для заказа" });
@@ -502,6 +598,82 @@ app.post("/orders", authenticateToken, async (req, res) => {
       );
     }
 
+    if (checkout) {
+      const fullAddress =
+        checkout.full_address ||
+        checkout.fullAddress ||
+        checkout.address ||
+        "Адрес не указан";
+
+      const recipientName =
+        checkout.recipient_name ||
+        checkout.recipientName ||
+        checkout.name ||
+        null;
+
+      const phone = checkout.phone || null;
+
+      const deliveryMethod =
+        checkout.delivery_method ||
+        checkout.deliveryMethod ||
+        checkout.delivery ||
+        null;
+
+      const deliveryPrice = Number(
+        checkout.delivery_price || checkout.deliveryPrice || 0
+      );
+
+      const paymentMethod =
+        checkout.payment_method ||
+        checkout.paymentMethod ||
+        checkout.payment ||
+        "cash";
+
+      await pool.query(
+        `INSERT INTO order_delivery_details
+         (order_id, recipient_name, phone, full_address, delivery_method, delivery_price)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [
+          orderId,
+          recipientName,
+          phone,
+          fullAddress,
+          deliveryMethod,
+          deliveryPrice,
+        ]
+      );
+
+      await pool.query(
+        `INSERT INTO order_payment_details
+         (order_id, payment_method, payment_status, payment_amount)
+         VALUES ($1, $2, $3, $4)`,
+        [orderId, paymentMethod, "pending", total]
+      );
+
+      await pool.query(
+        `INSERT INTO payment_transactions
+         (order_id, user_id, payment_type, amount, status, provider)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [orderId, userId, paymentMethod, total, "pending", "demo"]
+      );
+    }
+
+    await pool.query(
+      "INSERT INTO order_history (order_id, status) VALUES ($1, $2)",
+      [orderId, "Заказ собирается"]
+    );
+
+    const cartResult = await pool.query(
+      "SELECT id FROM carts WHERE user_id = $1",
+      [userId]
+    );
+
+    if (cartResult.rows.length > 0) {
+      await pool.query("DELETE FROM cart_items WHERE cart_id = $1", [
+        cartResult.rows[0].id,
+      ]);
+    }
+
     await pool.query("COMMIT");
 
     const newOrder = await pool.query(
@@ -511,10 +683,13 @@ app.post("/orders", authenticateToken, async (req, res) => {
             json_build_object(
               'product_id', oi.product_id,
               'quantity', oi.quantity,
-              'price', oi.price
+              'price', oi.price,
+              'name', p.name,
+              'image_url', p.image_url
             )
           )
           FROM order_items oi
+          LEFT JOIN products p ON p.id = oi.product_id
           WHERE oi.order_id = o.id
         ) AS items
        FROM orders o
@@ -568,8 +743,51 @@ app.get("/orders", authenticateToken, async (req, res) => {
   }
 });
 
+app.put("/orders/:id/status", authenticateToken, async (req, res) => {
+  const userId = req.user.id;
+  const orderId = Number(req.params.id);
+  const { status } = req.body;
+
+  if (!status) {
+    return res.status(400).json({ message: "Не указан статус" });
+  }
+
+  try {
+    const orderResult = await pool.query(
+      "SELECT id FROM orders WHERE id = $1 AND user_id = $2",
+      [orderId, userId]
+    );
+
+    if (orderResult.rows.length === 0) {
+      return res.status(404).json({ message: "Заказ не найден" });
+    }
+
+    await pool.query("UPDATE orders SET status = $1 WHERE id = $2", [
+      status,
+      orderId,
+    ]);
+
+    await pool.query("INSERT INTO order_history (order_id, status) VALUES ($1, $2)", [
+      orderId,
+      status,
+    ]);
+
+    res.json({ message: "Статус заказа обновлён" });
+  } catch (err) {
+    console.error("Ошибка PUT /orders/:id/status:", err);
+    res.status(500).json({ message: "Ошибка сервера", error: err.message });
+  }
+});
+
+app.use((req, res) => {
+  res.status(404).json({
+    message: "Маршрут не найден",
+    path: req.originalUrl,
+  });
+});
+
 const PORT = process.env.PORT || 3000;
 
-app.listen(PORT, () => {
-  console.log(`Сервер запущен на http://localhost:${PORT}`);
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`Сервер запущен на http://0.0.0.0:${PORT}`);
 });
