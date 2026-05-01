@@ -1,212 +1,261 @@
-import 'package:get/get.dart';
+import 'dart:convert';
 
-import '../api/demo_payment_gateway.dart';
-import '../api/payment_service.dart';
+import 'package:get/get.dart';
+import 'package:get_storage/get_storage.dart';
+
+import '../controllers/auth_controller.dart';
 import '../models/payment_method_model.dart';
 import '../models/payment_transaction_model.dart';
-import 'auth_controller.dart';
 
 class PaymentController extends GetxController {
-  final AuthController authController;
-
-  late PaymentService _paymentService;
+  final GetStorage _storage = GetStorage();
 
   final RxList<PaymentMethodModel> paymentMethods = <PaymentMethodModel>[].obs;
-  final RxList<PaymentTransactionModel> paymentTransactions =
-      <PaymentTransactionModel>[].obs;
-
-  final Rxn<PaymentMethodModel> selectedMethod = Rxn<PaymentMethodModel>();
+  final RxnString selectedPaymentMethodId = RxnString();
   final RxBool isLoading = false.obs;
-  final RxBool isProcessingPayment = false.obs;
-  final Rxn<PaymentTransactionModel> lastTransaction =
-  Rxn<PaymentTransactionModel>();
 
-  PaymentController({
-    required this.authController,
-  });
+  AuthController get authController => Get.find<AuthController>();
+
+  String get _storageKey {
+    final int userId = authController.user.value?.id ?? 0;
+    return 'payment_methods_user_$userId';
+  }
+
+  List<PaymentMethodModel> get methods => paymentMethods;
+
+  PaymentMethodModel? get selectedMethod => selectedPaymentMethod;
+
+  PaymentMethodModel? get selectedPaymentMethod {
+    final String? id = selectedPaymentMethodId.value;
+
+    if (id == null) {
+      return defaultPaymentMethod;
+    }
+
+    return paymentMethods.firstWhereOrNull((item) => item.id == id) ??
+        defaultPaymentMethod;
+  }
+
+  PaymentMethodModel? get defaultPaymentMethod {
+    return paymentMethods.firstWhereOrNull((item) => item.isDefault) ??
+        paymentMethods.firstOrNull;
+  }
 
   @override
   void onInit() {
     super.onInit();
-    _paymentService = PaymentService(token: authController.token.value);
-
-    ever<String?>(authController.token, (String? newToken) async {
-      if (newToken != null && newToken.isNotEmpty) {
-        _paymentService = PaymentService(token: newToken);
-        await loadPaymentMethods();
-        await loadPaymentTransactions();
-      } else {
-        paymentMethods.clear();
-        paymentTransactions.clear();
-        selectedMethod.value = null;
-        lastTransaction.value = null;
-      }
-    });
+    loadPaymentMethods();
   }
 
   Future<void> loadPaymentMethods() async {
-    if (authController.token.isEmpty) {
-      return;
-    }
-
     isLoading.value = true;
 
-    try {
-      final List<PaymentMethodModel> items =
-      await _paymentService.getPaymentMethods();
+    final result = <PaymentMethodModel>[
+      PaymentMethodModel.cash(),
+      PaymentMethodModel.sbp(),
+    ];
 
-      paymentMethods.assignAll(items);
+    final raw = _storage.read<List<dynamic>>(_storageKey);
 
-      PaymentMethodModel? defaultMethod;
-      try {
-        defaultMethod =
-            items.firstWhere((PaymentMethodModel item) => item.isDefault);
-      } catch (_) {
-        defaultMethod = items.isNotEmpty ? items.first : null;
-      }
+    if (raw != null) {
+      result.addAll(
+        raw.map((item) {
+          if (item is String) {
+            return PaymentMethodModel.fromJson(
+              Map<String, dynamic>.from(jsonDecode(item) as Map),
+            );
+          }
 
-      selectedMethod.value = defaultMethod;
-    } catch (e) {
-      Get.snackbar('Ошибка', 'Не удалось загрузить способы оплаты: $e');
-    } finally {
-      isLoading.value = false;
-    }
-  }
-
-  Future<void> loadPaymentTransactions() async {
-    if (authController.token.isEmpty) {
-      return;
+          return PaymentMethodModel.fromJson(
+            Map<String, dynamic>.from(item as Map),
+          );
+        }),
+      );
     }
 
-    try {
-      final List<PaymentTransactionModel> items =
-      await _paymentService.getPaymentTransactions();
-      paymentTransactions.assignAll(items);
-    } catch (e) {
-      Get.snackbar('Ошибка', 'Не удалось загрузить историю платежей: $e');
+    if (!result.any((item) => item.isDefault)) {
+      result[0] = result[0].copyWith(isDefault: true);
     }
-  }
 
-  void selectMethod(PaymentMethodModel method) {
-    selectedMethod.value = method;
+    paymentMethods.assignAll(result);
+    selectedPaymentMethodId.value = defaultPaymentMethod?.id ?? result.first.id;
+
+    isLoading.value = false;
   }
 
   Future<void> addCardMethod({
     required String cardNumber,
-    required String expiryMonth,
-    required String expiryYear,
+    String holderName = '',
+    required dynamic expiryMonth,
+    required dynamic expiryYear,
+    String bankName = 'Банковская карта',
     bool setAsDefault = false,
   }) async {
-    final int userId = authController.user.value?.id ?? 0;
-    if (userId == 0) {
-      throw Exception('Пользователь не найден');
+    final digits = cardNumber.replaceAll(RegExp(r'[^0-9]'), '');
+
+    if (digits.length < 12) {
+      throw Exception('Введите корректный номер карты');
     }
 
-    final DemoPaymentGateway gateway = DemoPaymentGateway.instance;
-    final DateTime now = DateTime.now();
-    final String masked = gateway.maskCardNumber(cardNumber);
-    final String brand = gateway.detectCardBrand(cardNumber);
+    final last4 = digits.substring(digits.length - 4);
 
-    final PaymentMethodModel method = PaymentMethodModel(
-      id: 'card_${DateTime.now().millisecondsSinceEpoch}',
-      userId: userId,
-      type: PaymentMethodType.bankCard,
-      title: '$brand $masked',
-      holderName: null,
-      maskedNumber: masked,
-      bankName: null,
-      cardBrand: brand,
-      expiryMonth: expiryMonth,
-      expiryYear: expiryYear,
-      token: gateway.makeLocalToken(),
-      isDefault: setAsDefault || paymentMethods.isEmpty,
-      isActive: true,
-      isSystem: false,
-      createdAt: now,
-      updatedAt: now,
+    final card = PaymentMethodModel.card(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      userId: authController.user.value?.id,
+      last4: last4,
+      bankName: bankName,
+      maskedNumber: '•••• •••• •••• $last4',
+      expiryMonth: expiryMonth.toString(),
+      expiryYear: expiryYear.toString(),
+      isDefault: setAsDefault || !paymentMethods.any((item) => item.isCard),
     );
 
-    await _paymentService.addPaymentMethod(method);
-    await loadPaymentMethods();
+    if (card.isDefault) {
+      paymentMethods.assignAll(
+        paymentMethods.map((item) => item.copyWith(isDefault: false)).toList(),
+      );
+    }
+
+    paymentMethods.add(card);
+    selectedPaymentMethodId.value = card.id;
+
+    await _saveCards();
+  }
+
+  Future<void> addCard({
+    required String cardNumber,
+    required String holderName,
+    required String expiryDate,
+    String bankName = 'Банковская карта',
+  }) async {
+    final parts = expiryDate.split('/');
+
+    await addCardMethod(
+      cardNumber: cardNumber,
+      holderName: holderName,
+      expiryMonth: parts.isNotEmpty ? parts[0] : '12',
+      expiryYear: parts.length > 1 ? '20${parts[1]}' : '2030',
+      bankName: bankName,
+    );
   }
 
   Future<void> updateCardMethod({
     required String id,
-    required String expiryMonth,
-    required String expiryYear,
-    required bool isDefault,
+    String? cardNumber,
+    String holderName = '',
+    dynamic expiryMonth,
+    dynamic expiryYear,
+    String bankName = 'Банковская карта',
+    bool? isDefault,
   }) async {
-    final PaymentMethodModel existing = paymentMethods.firstWhere(
-          (PaymentMethodModel item) => item.id == id,
-    );
+    final index = paymentMethods.indexWhere((item) => item.id == id);
 
-    final String brand = existing.cardBrand ?? 'Карта';
-    final String masked = existing.maskedNumber ?? '****';
+    if (index == -1) {
+      return;
+    }
 
-    final PaymentMethodModel updated = existing.copyWith(
-      title: '$brand $masked',
-      expiryMonth: expiryMonth,
-      expiryYear: expiryYear,
-      isDefault: isDefault,
+    final old = paymentMethods[index];
+
+    String last4 = old.cardLast4;
+    String masked = old.maskedNumber;
+
+    if (cardNumber != null && cardNumber.isNotEmpty) {
+      final digits = cardNumber.replaceAll(RegExp(r'[^0-9]'), '');
+
+      if (digits.length < 12) {
+        throw Exception('Введите корректный номер карты');
+      }
+
+      last4 = digits.substring(digits.length - 4);
+      masked = '•••• •••• •••• $last4';
+    }
+
+    if (isDefault == true) {
+      paymentMethods.assignAll(
+        paymentMethods.map((item) => item.copyWith(isDefault: false)).toList(),
+      );
+    }
+
+    paymentMethods[index] = old.copyWith(
+      title: 'Карта •••• $last4',
+      subtitle: bankName,
+      cardLast4: last4,
+      bankName: bankName,
+      maskedNumber: masked,
+      expiryMonth: expiryMonth?.toString() ?? old.expiryMonth,
+      expiryYear: expiryYear?.toString() ?? old.expiryYear,
+      isDefault: isDefault ?? old.isDefault,
       updatedAt: DateTime.now(),
     );
 
-    await _paymentService.updatePaymentMethod(updated);
-    await loadPaymentMethods();
-  }
-
-  Future<void> deleteMethod(String id) async {
-    await _paymentService.deletePaymentMethod(id);
-    await loadPaymentMethods();
+    await _saveCards();
   }
 
   Future<void> setDefaultMethod(String id) async {
-    await _paymentService.setDefaultPaymentMethod(id);
-    await loadPaymentMethods();
+    paymentMethods.assignAll(
+      paymentMethods.map((item) {
+        return item.copyWith(
+          isDefault: item.id == id,
+          updatedAt: DateTime.now(),
+        );
+      }).toList(),
+    );
+
+    selectedPaymentMethodId.value = id;
+
+    await _saveCards();
   }
 
-  Future<PaymentTransactionModel> processOrderPayment({
-    required int orderId,
-    required double amount,
-    required PaymentMethodModel method,
-    String? cardNumber,
-    String? cvv,
-  }) async {
-    final int userId = authController.user.value?.id ?? 0;
-    if (userId == 0) {
-      throw Exception('Пользователь не найден');
+  Future<void> setDefaultPaymentMethod(String id) async {
+    await setDefaultMethod(id);
+  }
+
+  Future<void> deleteMethod(String id) async {
+    final method = paymentMethods.firstWhereOrNull((item) => item.id == id);
+
+    if (method == null || method.isSystem) {
+      return;
     }
 
-    isProcessingPayment.value = true;
+    paymentMethods.removeWhere((item) => item.id == id);
 
-    try {
-      final DemoPaymentResult result =
-      await DemoPaymentGateway.instance.processPayment(
-        userId: userId,
-        orderId: orderId,
-        amount: amount,
-        method: method,
-        cardNumber: cardNumber,
-        cvv: cvv,
-      );
-
-      await _paymentService.savePaymentTransaction(result.transaction);
-      await loadPaymentTransactions();
-
-      lastTransaction.value = result.transaction;
-      return result.transaction;
-    } finally {
-      isProcessingPayment.value = false;
+    if (selectedPaymentMethodId.value == id) {
+      selectedPaymentMethodId.value =
+          defaultPaymentMethod?.id ?? paymentMethods.first.id;
     }
+
+    await _saveCards();
   }
 
-  Future<PaymentTransactionModel?> getLatestPaymentForOrder(int orderId) async {
-    return _paymentService.getLatestPaymentForOrder(orderId);
+  Future<void> deleteCard(String id) async {
+    await deleteMethod(id);
   }
+
+  Future<void> removePaymentMethod(String id) async {
+    await deleteMethod(id);
+  }
+
+  Future<void> selectPaymentMethod(String id) async {
+    selectedPaymentMethodId.value = id;
+  }
+
+  Future<void> loadPaymentTransactions() async {}
 
   List<PaymentTransactionModel> getPaymentsForOrderLocal(int orderId) {
-    return paymentTransactions
-        .where((PaymentTransactionModel e) => e.orderId == orderId)
+    return <PaymentTransactionModel>[];
+  }
+
+  Future<void> _saveCards() async {
+    final cards = paymentMethods
+        .where((item) => item.isCard)
+        .map((item) => item.toJson())
         .toList();
+
+    await _storage.write(_storageKey, cards);
+  }
+
+  void clear() {
+    paymentMethods.clear();
+    selectedPaymentMethodId.value = null;
   }
 }

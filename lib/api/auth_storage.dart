@@ -1,59 +1,39 @@
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:get_storage/get_storage.dart';
 
 class AuthStorage {
+  static final GetStorage _box = GetStorage();
+
   static const String _tokenKey = 'auth_token';
-  static const String _legacyTokenKey = 'token';
-  static const String _userIdKey = 'user_id';
-  static const String _userNameKey = 'user_name';
-  static const String _userEmailKey = 'user_email';
+  static const String _userKey = 'auth_user';
 
   static Future<void> saveAuth({
     required String token,
     required Map<String, dynamic> user,
   }) async {
-    final SharedPreferences prefs = await SharedPreferences.getInstance();
-
-    await prefs.setString(_tokenKey, token);
-    await prefs.setString(_legacyTokenKey, token);
-    await prefs.setInt(_userIdKey, _toInt(user['id']));
-    await prefs.setString(_userNameKey, user['name']?.toString() ?? '');
-    await prefs.setString(_userEmailKey, user['email']?.toString() ?? '');
+    await _box.write(_tokenKey, token);
+    await _box.write(_userKey, user);
   }
 
-  static Future<void> saveToken(String token) async {
-    final SharedPreferences prefs = await SharedPreferences.getInstance();
-
-    await prefs.setString(_tokenKey, token);
-    await prefs.setString(_legacyTokenKey, token);
+  static Future<void> saveUser(Map<String, dynamic> user) async {
+    await _box.write(_userKey, user);
   }
 
   static Future<String?> getToken() async {
-    final SharedPreferences prefs = await SharedPreferences.getInstance();
+    return _box.read<String>(_tokenKey);
+  }
 
-    return prefs.getString(_tokenKey) ?? prefs.getString(_legacyTokenKey);
+  static Future<Map<String, dynamic>?> getUser() async {
+    final data = _box.read(_userKey);
+
+    if (data == null) {
+      return null;
+    }
+
+    return Map<String, dynamic>.from(data as Map);
   }
 
   static Future<void> clear() async {
-    final SharedPreferences prefs = await SharedPreferences.getInstance();
-
-    await prefs.remove(_tokenKey);
-    await prefs.remove(_legacyTokenKey);
-    await prefs.remove(_userIdKey);
-    await prefs.remove(_userNameKey);
-    await prefs.remove(_userEmailKey);
-  }
-
-  static Future<bool> isAuthorized() async {
-    final String? token = await getToken();
-
-    return token != null && token.isNotEmpty;
-  }
-
-  static int _toInt(dynamic value) {
-    if (value == null) return 0;
-    if (value is int) return value;
-    if (value is num) return value.toInt();
-
-    return int.tryParse(value.toString()) ?? 0;
+    await _box.remove(_tokenKey);
+    await _box.remove(_userKey);
   }
 }

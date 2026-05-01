@@ -1,23 +1,12 @@
 import 'package:get/get.dart';
-import 'package:get_storage/get_storage.dart';
 
-import '../models/user.dart';
+import '../api/server_api_service.dart';
 import '../models/user_address.dart';
-import 'auth_controller.dart';
 
 class AddressBookController extends GetxController {
-  static const String _storageKeyPrefix = 'saved_addresses_user_';
-
-  final AuthController authController = Get.find<AuthController>();
-  final GetStorage _storage = GetStorage();
-
   final RxList<UserAddress> addresses = <UserAddress>[].obs;
   final RxnInt selectedAddressId = RxnInt();
-
-  String get _storageKey {
-    final int userId = authController.user.value?.id ?? 0;
-    return '$_storageKeyPrefix$userId';
-  }
+  final RxBool isLoading = false.obs;
 
   @override
   void onInit() {
@@ -25,76 +14,98 @@ class AddressBookController extends GetxController {
     loadAddresses();
   }
 
-  void loadAddresses() {
-    final List<dynamic>? raw = _storage.read<List<dynamic>>(_storageKey);
+  Future<void> loadAddresses() async {
+    try {
+      isLoading.value = true;
 
-    if (raw != null && raw.isNotEmpty) {
-      final List<UserAddress> parsed = raw
-          .map(
-            (e) => UserAddress.fromJson(
-          Map<String, dynamic>.from(e as Map),
-        ),
-      )
-          .toList();
+      final List<Map<String, dynamic>> data =
+      await ServerApiService.getAddresses();
+
+      final List<UserAddress> parsed =
+      data.map(UserAddress.fromJson).toList();
 
       addresses.assignAll(parsed);
-    } else {
-      _seedPrimaryAddressFromProfile();
-    }
-
-    _ensurePrimaryRules();
-    _ensureSelection();
-    saveAddresses();
-  }
-
-  void _seedPrimaryAddressFromProfile() {
-    final String profileAddress =
-        authController.user.value?.address?.trim() ?? '';
-
-    if (profileAddress.isEmpty) {
+      _ensureSelection();
+    } catch (_) {
       addresses.clear();
-      return;
+      selectedAddressId.value = null;
+    } finally {
+      isLoading.value = false;
     }
-
-    addresses.assignAll([
-      UserAddress(
-        id: 1,
-        title: 'Основной',
-        address: profileAddress,
-        isPrimary: true,
-      ),
-    ]);
   }
 
-  void _ensurePrimaryRules() {
-    if (addresses.isEmpty) {
+  UserAddress? get selectedAddress {
+    final int? id = selectedAddressId.value;
+
+    if (id == null) {
+      return primaryAddress;
+    }
+
+    return addresses.firstWhereOrNull((UserAddress item) => item.id == id) ??
+        primaryAddress;
+  }
+
+  UserAddress? get primaryAddress {
+    return addresses.firstWhereOrNull((UserAddress item) => item.isPrimary) ??
+        addresses.firstOrNull;
+  }
+
+  void selectAddress(int id) {
+    selectedAddressId.value = id;
+  }
+
+  Future<void> addAddress(UserAddress address) async {
+    final Map<String, dynamic> created =
+    await ServerApiService.createAddress(address.toApiJson());
+
+    final UserAddress newAddress = UserAddress.fromJson(created);
+
+    selectedAddressId.value = newAddress.id;
+
+    await loadAddresses();
+  }
+
+  Future<void> updateAddress(UserAddress address) async {
+    final Map<String, dynamic> updated =
+    await ServerApiService.updateAddress(address.id, address.toApiJson());
+
+    final UserAddress newAddress = UserAddress.fromJson(updated);
+
+    selectedAddressId.value = newAddress.id;
+
+    await loadAddresses();
+  }
+
+  Future<void> removeAddress(int id) async {
+    await ServerApiService.deleteAddress(id);
+
+    if (selectedAddressId.value == id) {
+      selectedAddressId.value = null;
+    }
+
+    await loadAddresses();
+  }
+
+  Future<void> setPrimary(int id) async {
+    final UserAddress? address =
+    addresses.firstWhereOrNull((UserAddress item) => item.id == id);
+
+    if (address == null) {
       return;
     }
 
-    bool hasPrimary = addresses.any((a) => a.isPrimary);
+    await updateAddress(address.copyWith(isPrimary: true));
+  }
 
-    if (!hasPrimary) {
-      final UserAddress first = addresses.first;
-      addresses[0] = first.copyWith(isPrimary: true);
-      hasPrimary = true;
-    }
+  Future<void> setPrimaryAddress(int id) async {
+    await setPrimary(id);
+  }
 
-    bool primaryFound = false;
+  void syncPrimaryFromProfileIfNeeded() {}
 
-    final List<UserAddress> normalized = addresses.map((a) {
-      if (a.isPrimary && !primaryFound) {
-        primaryFound = true;
-        return a;
-      }
-
-      if (a.isPrimary && primaryFound) {
-        return a.copyWith(isPrimary: false);
-      }
-
-      return a;
-    }).toList();
-
-    addresses.assignAll(normalized);
+  void clear() {
+    addresses.clear();
+    selectedAddressId.value = null;
   }
 
   void _ensureSelection() {
@@ -103,173 +114,13 @@ class AddressBookController extends GetxController {
       return;
     }
 
-    final bool hasSelected =
-    addresses.any((a) => a.id == selectedAddressId.value);
+    final int? current = selectedAddressId.value;
 
-    if (hasSelected) {
+    if (current != null &&
+        addresses.any((UserAddress item) => item.id == current)) {
       return;
     }
 
-    final UserAddress primary = addresses.firstWhere(
-          (a) => a.isPrimary,
-      orElse: () => addresses.first,
-    );
-
-    selectedAddressId.value = primary.id;
-  }
-
-  void saveAddresses() {
-    _storage.write(
-      _storageKey,
-      addresses.map((e) => e.toJson()).toList(),
-    );
-  }
-
-  UserAddress? get selectedAddress {
-    if (selectedAddressId.value == null) {
-      return null;
-    }
-
-    try {
-      return addresses.firstWhere((a) => a.id == selectedAddressId.value);
-    } catch (_) {
-      return null;
-    }
-  }
-
-  UserAddress? get primaryAddress {
-    if (addresses.isEmpty) {
-      return null;
-    }
-
-    try {
-      return addresses.firstWhere((a) => a.isPrimary);
-    } catch (_) {
-      return addresses.first;
-    }
-  }
-
-  void selectAddress(int id) {
-    selectedAddressId.value = id;
-  }
-
-  Future<void> addAddress(UserAddress address) async {
-    final int nextId = addresses.isEmpty
-        ? 1
-        : addresses.map((e) => e.id).reduce((a, b) => a > b ? a : b) + 1;
-
-    final UserAddress newAddress = address.copyWith(
-      id: nextId,
-      isPrimary: addresses.isEmpty ? true : address.isPrimary,
-    );
-
-    if (newAddress.isPrimary) {
-      final List<UserAddress> updated = addresses
-          .map((a) => a.copyWith(isPrimary: false))
-          .toList();
-
-      updated.add(newAddress);
-      addresses.assignAll(updated);
-    } else {
-      addresses.add(newAddress);
-    }
-
-    selectedAddressId.value = newAddress.id;
-
-    _ensurePrimaryRules();
-    _ensureSelection();
-    saveAddresses();
-    await _syncProfileAddressWithPrimary();
-  }
-
-  Future<void> removeAddress(int id) async {
-    final UserAddress? removing =
-    addresses.firstWhereOrNull((a) => a.id == id);
-
-    if (removing == null) {
-      return;
-    }
-
-    addresses.removeWhere((a) => a.id == id);
-
-    if (removing.isPrimary && addresses.isNotEmpty) {
-      final UserAddress first = addresses.first;
-      addresses[0] = first.copyWith(isPrimary: true);
-    }
-
-    _ensurePrimaryRules();
-    _ensureSelection();
-    saveAddresses();
-    await _syncProfileAddressWithPrimary();
-  }
-
-  Future<void> setPrimary(int id) async {
-    final List<UserAddress> updated = addresses
-        .map((a) => a.copyWith(isPrimary: a.id == id))
-        .toList();
-
-    addresses.assignAll(updated);
-    selectedAddressId.value = id;
-
-    _ensurePrimaryRules();
-    _ensureSelection();
-    saveAddresses();
-    await _syncProfileAddressWithPrimary();
-  }
-
-  void syncPrimaryFromProfileIfNeeded() {
-    final String profileAddress =
-        authController.user.value?.address?.trim() ?? '';
-
-    if (profileAddress.isEmpty) {
-      return;
-    }
-
-    if (addresses.isEmpty) {
-      addresses.add(
-        UserAddress(
-          id: 1,
-          title: 'Основной',
-          address: profileAddress,
-          isPrimary: true,
-        ),
-      );
-
-      selectedAddressId.value = 1;
-      saveAddresses();
-      return;
-    }
-
-    final int primaryIndex = addresses.indexWhere((a) => a.isPrimary);
-
-    if (primaryIndex == -1) {
-      return;
-    }
-
-    final UserAddress primary = addresses[primaryIndex];
-    addresses[primaryIndex] = primary.copyWith(address: profileAddress);
-
-    _ensurePrimaryRules();
-    _ensureSelection();
-    saveAddresses();
-  }
-
-  Future<void> _syncProfileAddressWithPrimary() async {
-    final User? currentUser = authController.user.value;
-    if (currentUser == null) {
-      return;
-    }
-
-    final UserAddress? primary = primaryAddress;
-    final String newProfileAddress = primary?.fullAddress.trim() ?? '';
-
-    final String currentProfileAddress = currentUser.address?.trim() ?? '';
-    if (currentProfileAddress == newProfileAddress) {
-      return;
-    }
-
-    await authController.updateProfile(
-      currentUser.copyWith(address: newProfileAddress),
-    );
+    selectedAddressId.value = primaryAddress?.id ?? addresses.first.id;
   }
 }

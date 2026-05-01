@@ -1,4 +1,3 @@
-// lib/models/order_item.dart
 class OrderItem {
   final int id;
   final int orderId;
@@ -19,27 +18,33 @@ class OrderItem {
   });
 
   factory OrderItem.fromJson(Map<String, dynamic> json) {
-    double parseDouble(dynamic v) {
-      if (v == null) return 0.0;
-      if (v is num) return v.toDouble();
-      return double.tryParse(v.toString()) ?? 0.0;
-    }
-
-    int parseInt(dynamic v) {
-      if (v == null) return 0;
-      if (v is int) return v;
-      if (v is num) return v.toInt();
-      return int.tryParse(v.toString()) ?? 0;
-    }
-
     return OrderItem(
-      id: parseInt(json['id'] ?? json['order_item_id']),
-      orderId: parseInt(json['order_id']),
-      productId: parseInt(json['product_id']),
-      name: json['name'] ?? json['product_name'] ?? '',
-      imageUrl: json['image_url'] ?? json['product_image'] ?? '',
-      quantity: parseInt(json['quantity']),
-      price: parseDouble(json['price']),
+      id: _toInt(json['id'] ?? json['order_item_id']),
+      orderId: _toInt(json['order_id']),
+      productId: _toInt(json['product_id']),
+      name: (json['name'] ?? json['product_name'] ?? '').toString(),
+      imageUrl: (json['image_url'] ?? json['product_image'] ?? '').toString(),
+      quantity: _toInt(json['quantity']),
+      price: _toDouble(json['price']),
     );
+  }
+
+  double get total => price * quantity;
+
+  static int _toInt(dynamic value) {
+    if (value == null) return 0;
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+
+    return int.tryParse(value.toString()) ?? 0;
+  }
+
+  static double _toDouble(dynamic value) {
+    if (value == null) return 0.0;
+    if (value is double) return value;
+    if (value is int) return value.toDouble();
+    if (value is num) return value.toDouble();
+
+    return double.tryParse(value.toString().replaceAll(',', '.')) ?? 0.0;
   }
 }

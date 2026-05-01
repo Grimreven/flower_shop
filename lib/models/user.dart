@@ -2,61 +2,40 @@ class User {
   final int id;
   final String name;
   final String email;
-  final String? phone;
-  final String? address;
-
-  // Данные лояльности
-  int loyaltyPoints;
-  final String loyaltyLevel;
+  final String phone;
+  final String address;
+  final int loyaltyPoints;
   final double totalSpent;
-  final String loyaltyColor; // hex цвет карты
+  final String loyaltyLevel;
+  final String loyaltyColor;
 
-  User({
+  const User({
     required this.id,
     required this.name,
     required this.email,
-    this.phone,
-    this.address,
-    required this.loyaltyPoints,
-    required this.loyaltyLevel,
-    required this.totalSpent,
-    required this.loyaltyColor,
+    this.phone = '',
+    this.address = '',
+    this.loyaltyPoints = 0,
+    this.totalSpent = 0,
+    this.loyaltyLevel = 'Bronze',
+    this.loyaltyColor = '#CD7F32',
   });
 
   factory User.fromJson(Map<String, dynamic> json) {
     return User(
-      id: json['id'],
-      name: json['name'],
-      email: json['email'],
-      phone: json['phone'],
-      address: json['address'],
-      loyaltyPoints: json['loyalty_points'] ?? 0,
-      loyaltyLevel: json['loyalty_level'] ?? 'Bronze',
-      totalSpent: double.tryParse(json['total_spent'].toString()) ?? 0.0,
-      loyaltyColor: json['loyalty_color'] ?? '#CD7F32', // бронзовый цвет по умолчанию
-    );
-  }
-
-  User copyWith({
-    String? name,
-    String? email,
-    String? phone,
-    String? address,
-    int? loyaltyPoints,
-    String? loyaltyLevel,
-    double? totalSpent,
-    String? loyaltyColor,
-  }) {
-    return User(
-      id: id,
-      name: name ?? this.name,
-      email: email ?? this.email,
-      phone: phone ?? this.phone,
-      address: address ?? this.address,
-      loyaltyPoints: loyaltyPoints ?? this.loyaltyPoints,
-      loyaltyLevel: loyaltyLevel ?? this.loyaltyLevel,
-      totalSpent: totalSpent ?? this.totalSpent,
-      loyaltyColor: loyaltyColor ?? this.loyaltyColor,
+      id: _toInt(json['id']),
+      name: json['name']?.toString() ?? '',
+      email: json['email']?.toString() ?? '',
+      phone: json['phone']?.toString() ?? '',
+      address: json['address']?.toString() ?? '',
+      loyaltyPoints: _toInt(json['loyalty_points'] ?? json['loyaltyPoints']),
+      totalSpent: _toDouble(json['total_spent'] ?? json['totalSpent']),
+      loyaltyLevel: json['loyalty_level']?.toString() ??
+          json['loyaltyLevel']?.toString() ??
+          'Bronze',
+      loyaltyColor: json['loyalty_color']?.toString() ??
+          json['loyaltyColor']?.toString() ??
+          '#CD7F32',
     );
   }
 
@@ -68,9 +47,49 @@ class User {
       'phone': phone,
       'address': address,
       'loyalty_points': loyaltyPoints,
-      'loyalty_level': loyaltyLevel,
       'total_spent': totalSpent,
+      'loyalty_level': loyaltyLevel,
       'loyalty_color': loyaltyColor,
     };
+  }
+
+  User copyWith({
+    int? id,
+    String? name,
+    String? email,
+    String? phone,
+    String? address,
+    int? loyaltyPoints,
+    double? totalSpent,
+    String? loyaltyLevel,
+    String? loyaltyColor,
+  }) {
+    return User(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      email: email ?? this.email,
+      phone: phone ?? this.phone,
+      address: address ?? this.address,
+      loyaltyPoints: loyaltyPoints ?? this.loyaltyPoints,
+      totalSpent: totalSpent ?? this.totalSpent,
+      loyaltyLevel: loyaltyLevel ?? this.loyaltyLevel,
+      loyaltyColor: loyaltyColor ?? this.loyaltyColor,
+    );
+  }
+
+  static int _toInt(dynamic value) {
+    if (value == null) return 0;
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+
+    return int.tryParse(value.toString()) ?? 0;
+  }
+
+  static double _toDouble(dynamic value) {
+    if (value == null) return 0.0;
+    if (value is double) return value;
+    if (value is num) return value.toDouble();
+
+    return double.tryParse(value.toString().replaceAll(',', '.')) ?? 0.0;
   }
 }

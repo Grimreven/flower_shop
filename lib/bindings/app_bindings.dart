@@ -39,7 +39,7 @@ class AppBindings extends Bindings {
     );
 
     Get.put<PaymentController>(
-      PaymentController(authController: authController),
+      PaymentController(),
       permanent: true,
     );
 

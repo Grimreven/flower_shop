@@ -1,6 +1,6 @@
-import '../config/app_config.dart';
 import '../api/local_demo_service.dart';
 import '../api/server_api_service.dart';
+import '../config/app_config.dart';
 import '../models/order_model.dart';
 
 class OrderService {
@@ -11,22 +11,22 @@ class OrderService {
     required this.token,
   });
 
-  Future<Map<String, dynamic>> createOrder({
+  Future<OrderModel> createOrder({
     required List<Map<String, dynamic>> itemsMaps,
     required Map<String, dynamic> checkoutData,
   }) async {
-    if (AppConfig.useBackend) {
-      return ServerApiService.createOrder(
-        itemsMaps: itemsMaps,
-        checkoutData: checkoutData,
-      );
-    }
-
-    return _localDemoService.createOrder(
+    final Map<String, dynamic> rawOrder = AppConfig.useBackend
+        ? await ServerApiService.createOrder(
+      itemsMaps: itemsMaps,
+      checkoutData: checkoutData,
+    )
+        : await _localDemoService.createOrder(
       token,
       itemsMaps,
       checkoutData,
     );
+
+    return OrderModel.fromJson(rawOrder);
   }
 
   Future<List<OrderModel>> getUserOrders() async {
@@ -34,9 +34,7 @@ class OrderService {
         ? await ServerApiService.getOrders()
         : await _localDemoService.getOrdersRaw(token);
 
-    return rawOrders.map((Map<String, dynamic> e) {
-      return OrderModel.fromJson(e);
-    }).toList();
+    return rawOrders.map(OrderModel.fromJson).toList();
   }
 
   Future<void> updateOrderStatus(

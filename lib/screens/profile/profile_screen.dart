@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 
 import '../../api/local_demo_service.dart';
 import '../../api/notification_service.dart';
+import '../../controllers/address_book_controller.dart';
 import '../../controllers/auth_controller.dart';
 import '../../controllers/order_controller.dart';
 import '../../controllers/payment_controller.dart';
@@ -10,25 +12,8 @@ import '../../controllers/settings_controller.dart';
 import '../../models/payment_method_model.dart';
 import '../../models/user.dart';
 import '../../utils/app_colors.dart';
-import 'loyalty_card.dart';
-
-class LoyaltyPreviewData {
-  final String level;
-  final int points;
-  final double totalSpent;
-  final int nextLevelPoints;
-  final String colorHex;
-  final String nextLevelLabel;
-
-  const LoyaltyPreviewData({
-    required this.level,
-    required this.points,
-    required this.totalSpent,
-    required this.nextLevelPoints,
-    required this.colorHex,
-    required this.nextLevelLabel,
-  });
-}
+import '../../utils/phone_input_formatter.dart';
+import 'profile_address_section.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -37,86 +22,63 @@ class ProfileScreen extends StatefulWidget {
   State<ProfileScreen> createState() => _ProfileScreenState();
 }
 
-class _ProfileScreenState extends State<ProfileScreen>
-    with SingleTickerProviderStateMixin {
+class _ProfileScreenState extends State<ProfileScreen> {
   final AuthController authController = Get.find<AuthController>();
   final SettingsController settingsController = Get.find<SettingsController>();
   final OrderController orderController = Get.find<OrderController>();
   final PaymentController paymentController = Get.find<PaymentController>();
+  final AddressBookController addressBookController =
+  Get.find<AddressBookController>();
+
+  final TextEditingController nameController = TextEditingController();
+  final TextEditingController emailController = TextEditingController();
+  final TextEditingController phoneController = TextEditingController();
 
   User? editedUser;
-  User? _savedUserSnapshot;
+  User? savedUserSnapshot;
 
   bool isLoading = true;
   bool isEditing = false;
   String activeSection = 'info';
 
-  late final TextEditingController nameController;
-  late final TextEditingController emailController;
-  late final TextEditingController phoneController;
-  late final TextEditingController addressController;
-
-  static const Duration _sectionAnimationDuration =
-  Duration(milliseconds: 320);
-  static const Duration _tabAnimationDuration = Duration(milliseconds: 280);
-  static const Curve _tabCurve = Curves.easeInOutCubic;
-  static const Curve _contentCurve = Curves.easeOutCubic;
-
   @override
   void initState() {
     super.initState();
-
-    nameController = TextEditingController();
-    emailController = TextEditingController();
-    phoneController = TextEditingController();
-    addressController = TextEditingController();
-
     _loadProfile();
   }
 
   @override
   void dispose() {
-    FocusManager.instance.primaryFocus?.unfocus();
-
     nameController.dispose();
     emailController.dispose();
     phoneController.dispose();
-    addressController.dispose();
-
     super.dispose();
   }
 
-  void _unfocusEverything() {
-    final FocusScopeNode scope = FocusScope.of(context);
-    if (!scope.hasPrimaryFocus) {
-      scope.unfocus();
-    }
-  }
-
   Future<void> _loadProfile() async {
-    if (!mounted) return;
-
-    setState(() => isLoading = true);
+    setState(() {
+      isLoading = true;
+    });
 
     final User? profile = await authController.getProfile();
+
     await orderController.fetchUserOrders();
     await paymentController.loadPaymentMethods();
     await paymentController.loadPaymentTransactions();
+    await addressBookController.loadAddresses();
 
-    if (!mounted) return;
-
-    if (profile == null) {
-      setState(() => isLoading = false);
+    if (!mounted) {
       return;
     }
 
-    editedUser = profile;
-    _savedUserSnapshot = profile;
+    if (profile != null) {
+      editedUser = profile;
+      savedUserSnapshot = profile;
 
-    nameController.text = profile.name;
-    emailController.text = profile.email;
-    phoneController.text = profile.phone ?? '';
-    addressController.text = profile.address ?? '';
+      nameController.text = profile.name;
+      emailController.text = profile.email;
+      phoneController.text = profile.phone;
+    }
 
     setState(() {
       isEditing = false;
@@ -124,28 +86,29 @@ class _ProfileScreenState extends State<ProfileScreen>
     });
   }
 
-  void _showMessage(String msg) {
-    if (!mounted) return;
+  void _showMessage(String message) {
+    if (!mounted) {
+      return;
+    }
 
-    final messenger = ScaffoldMessenger.maybeOf(context);
-    messenger?.hideCurrentSnackBar();
-    messenger?.showSnackBar(
-      SnackBar(content: Text(msg)),
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
     );
   }
 
   void _startEditing() {
-    _unfocusEverything();
-
     final User? user = editedUser;
-    if (user == null) return;
 
-    _savedUserSnapshot = user;
+    if (user == null) {
+      return;
+    }
+
+    savedUserSnapshot = user;
 
     nameController.text = user.name;
     emailController.text = user.email;
-    phoneController.text = user.phone ?? '';
-    addressController.text = user.address ?? '';
+    phoneController.text = user.phone;
 
     setState(() {
       isEditing = true;
@@ -153,121 +116,95 @@ class _ProfileScreenState extends State<ProfileScreen>
     });
   }
 
-  Future<void> handleSave() async {
-    final User? currentUser = editedUser;
-    if (currentUser == null) return;
+  void _cancelEditing() {
+    final User? user = savedUserSnapshot ?? editedUser;
 
-    _unfocusEverything();
-
-    setState(() => isLoading = true);
-
-    final User? updated = await authController.updateProfile(currentUser);
-
-    if (!mounted) return;
-
-    if (updated != null) {
-      editedUser = updated;
-      _savedUserSnapshot = updated;
-
-      nameController.text = updated.name;
-      emailController.text = updated.email;
-      phoneController.text = updated.phone ?? '';
-      addressController.text = updated.address ?? '';
-
-      setState(() {
-        isEditing = false;
-        isLoading = false;
-      });
-
-      _showMessage('Профиль успешно обновлён');
-    } else {
-      setState(() => isLoading = false);
-      _showMessage('Ошибка при обновлении профиля');
+    if (user == null) {
+      return;
     }
-  }
 
-  void handleCancel() {
-    _unfocusEverything();
+    editedUser = user;
 
-    final User? snapshot = _savedUserSnapshot ?? editedUser;
-    if (snapshot == null) return;
+    nameController.text = user.name;
+    emailController.text = user.email;
+    phoneController.text = user.phone;
 
-    editedUser = snapshot;
-
-    nameController.text = snapshot.name;
-    emailController.text = snapshot.email;
-    phoneController.text = snapshot.email;
-    phoneController.text = snapshot.phone ?? '';
-    addressController.text = snapshot.address ?? '';
+    FocusManager.instance.primaryFocus?.unfocus();
 
     setState(() {
       isEditing = false;
     });
   }
 
-  void _changeSection(String id) {
-    _unfocusEverything();
+  Future<void> _saveProfile() async {
+    final User? current = editedUser;
 
-    if (activeSection == id) return;
-
-    if (isEditing && id != 'info') {
-      handleCancel();
+    if (current == null) {
+      return;
     }
 
-    if (!mounted) return;
+    FocusManager.instance.primaryFocus?.unfocus();
+
+    final User updatedUser = current.copyWith(
+      name: nameController.text.trim(),
+      email: emailController.text.trim(),
+      phone: phoneController.text.trim(),
+    );
 
     setState(() {
-      activeSection = id;
+      isLoading = true;
+    });
+
+    final User? updated = await authController.updateProfile(updatedUser);
+
+    if (!mounted) {
+      return;
+    }
+
+    if (updated != null) {
+      editedUser = updated;
+      savedUserSnapshot = updated;
+
+      nameController.text = updated.name;
+      emailController.text = updated.email;
+      phoneController.text = updated.phone;
+
+      _showMessage('Профиль успешно обновлён');
+    } else {
+      _showMessage('Не удалось сохранить профиль');
+    }
+
+    setState(() {
+      isEditing = false;
+      isLoading = false;
     });
   }
 
-  Future<void> handleLogout() async {
-    _unfocusEverything();
+  void _changeSection(String section) {
+    if (isEditing && section != 'info') {
+      _cancelEditing();
+    }
 
+    setState(() {
+      activeSection = section;
+    });
+  }
+
+  Future<void> _logout() async {
     final bool? confirmed = await showDialog<bool>(
       context: context,
       builder: (BuildContext context) {
-        final bool isDark = Theme.of(context).brightness == Brightness.dark;
-
         return AlertDialog(
-          backgroundColor: isDark ? AppColors.darkSurface : Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-            side: BorderSide(
-              color: isDark ? AppColors.darkBorder : AppColors.border,
-            ),
-          ),
           title: const Text('Выход из аккаунта'),
           content: const Text('Вы уверены, что хотите выйти?'),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(false),
-              child: Text(
-                'Отмена',
-                style: TextStyle(
-                  color: isDark ? AppColors.purpleLight : AppColors.primary,
-                ),
-              ),
+              child: const Text('Отмена'),
             ),
-            DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: isDark
-                    ? AppColors.darkBrandGradient
-                    : AppColors.brandGradient,
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: ElevatedButton(
-                onPressed: () => Navigator.of(context).pop(true),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.transparent,
-                  shadowColor: Colors.transparent,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                ),
-                child: const Text('Выйти'),
-              ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Выйти'),
             ),
           ],
         );
@@ -276,74 +213,50 @@ class _ProfileScreenState extends State<ProfileScreen>
 
     if (confirmed == true) {
       await authController.logout();
-      if (!mounted) return;
+
+      if (!mounted) {
+        return;
+      }
+
       Get.offAllNamed('/main');
     }
   }
 
   Future<void> _resetDemoData() async {
-    _unfocusEverything();
-
     final bool? confirmed = await showDialog<bool>(
       context: context,
       builder: (BuildContext context) {
-        final bool isDark = Theme.of(context).brightness == Brightness.dark;
-
         return AlertDialog(
-          backgroundColor: isDark ? AppColors.darkSurface : Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-            side: BorderSide(
-              color: isDark ? AppColors.darkBorder : AppColors.border,
-            ),
-          ),
           title: const Text('Сбросить демо-данные'),
           content: const Text(
-            'Это вернёт приложение к начальному состоянию: очистятся корзина, заказы, текущая сессия и восстановятся демо-данные.',
+            'Это очистит текущую демо-сессию и вернёт приложение к начальному состоянию.',
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(false),
-              child: Text(
-                'Отмена',
-                style: TextStyle(
-                  color: isDark ? AppColors.purpleLight : AppColors.primary,
-                ),
-              ),
+              child: const Text('Отмена'),
             ),
-            DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: isDark
-                    ? AppColors.darkBrandGradient
-                    : AppColors.brandGradient,
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: ElevatedButton(
-                onPressed: () => Navigator.of(context).pop(true),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.transparent,
-                  shadowColor: Colors.transparent,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                ),
-                child: const Text('Сбросить'),
-              ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Сбросить'),
             ),
           ],
         );
       },
     );
 
-    if (confirmed != true) return;
+    if (confirmed != true) {
+      return;
+    }
 
     await LocalDemoService.instance.resetDemoData();
     await authController.logout();
 
-    if (!mounted) return;
+    if (!mounted) {
+      return;
+    }
 
-    _showMessage('Демо-данные успешно сброшены');
+    _showMessage('Демо-данные сброшены');
     Get.offAllNamed('/main');
   }
 
@@ -377,64 +290,16 @@ class _ProfileScreenState extends State<ProfileScreen>
     await NotificationService.instance.showSimpleNotification(
       id: 999001,
       title: 'Тестовое уведомление',
-      body: 'Системные уведомления работают корректно',
-    );
-  }
-
-  LoyaltyPreviewData _buildLoyaltyPreview(User user) {
-    final double ordersSpent = orderController.orders.fold<double>(
-      0,
-          (double sum, order) => sum + order.total,
-    );
-
-    final double totalSpent =
-    ordersSpent > user.totalSpent ? ordersSpent : user.totalSpent;
-
-    final int points = totalSpent.round();
-
-    if (totalSpent >= 15000) {
-      return LoyaltyPreviewData(
-        level: 'Gold',
-        points: points,
-        totalSpent: totalSpent,
-        nextLevelPoints: points,
-        colorHex: '#E0B94A',
-        nextLevelLabel: 'Gold',
-      );
-    }
-
-    if (totalSpent >= 5000) {
-      return LoyaltyPreviewData(
-        level: 'Silver',
-        points: points,
-        totalSpent: totalSpent,
-        nextLevelPoints: 15000,
-        colorHex: '#AAB7C7',
-        nextLevelLabel: 'Gold',
-      );
-    }
-
-    return LoyaltyPreviewData(
-      level: 'Bronze',
-      points: points,
-      totalSpent: totalSpent,
-      nextLevelPoints: 5000,
-      colorHex: '#CD7F32',
-      nextLevelLabel: 'Silver',
+      body: 'Уведомления работают корректно',
     );
   }
 
   Future<void> _showAddCardDialog() async {
-    _unfocusEverything();
-
-    final PaymentCardFormResult? result =
-    await showModalBottomSheet<PaymentCardFormResult>(
+    final PaymentCardFormResult? result = await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      backgroundColor: Theme.of(context).brightness == Brightness.dark
-          ? AppColors.darkSurface
-          : Colors.white,
+      backgroundColor: Theme.of(context).cardColor,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
@@ -443,32 +308,31 @@ class _ProfileScreenState extends State<ProfileScreen>
       },
     );
 
-    if (result == null) return;
+    if (result == null) {
+      return;
+    }
 
     try {
       await paymentController.addCardMethod(
         cardNumber: result.cardNumber,
+        holderName: result.holderName,
         expiryMonth: result.expiryMonth,
         expiryYear: result.expiryYear,
         setAsDefault: result.setAsDefault,
       );
-      _showMessage('Карта успешно добавлена');
+
+      _showMessage('Карта добавлена');
     } catch (e) {
       _showMessage('Ошибка при добавлении карты: $e');
     }
   }
 
   Future<void> _showEditCardDialog(PaymentMethodModel method) async {
-    _unfocusEverything();
-
-    final PaymentCardFormResult? result =
-    await showModalBottomSheet<PaymentCardFormResult>(
+    final PaymentCardFormResult? result = await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      backgroundColor: Theme.of(context).brightness == Brightness.dark
-          ? AppColors.darkSurface
-          : Colors.white,
+      backgroundColor: Theme.of(context).cardColor,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
@@ -477,243 +341,139 @@ class _ProfileScreenState extends State<ProfileScreen>
       },
     );
 
-    if (result == null) return;
+    if (result == null) {
+      return;
+    }
 
     try {
       await paymentController.updateCardMethod(
         id: method.id,
+        cardNumber: result.cardNumber,
+        holderName: result.holderName,
         expiryMonth: result.expiryMonth,
         expiryYear: result.expiryYear,
         isDefault: result.setAsDefault,
       );
-      _showMessage('Карта успешно обновлена');
+
+      _showMessage('Карта обновлена');
     } catch (e) {
       _showMessage('Ошибка при обновлении карты: $e');
     }
   }
 
   Future<void> _setDefaultPaymentMethod(String id) async {
-    _unfocusEverything();
-
-    try {
-      await paymentController.setDefaultMethod(id);
-      _showMessage('Способ оплаты по умолчанию обновлён');
-    } catch (e) {
-      _showMessage('Ошибка: $e');
-    }
+    await paymentController.setDefaultMethod(id);
+    _showMessage('Способ оплаты по умолчанию обновлён');
   }
 
   Future<void> _deletePaymentMethod(String id) async {
-    _unfocusEverything();
-
-    try {
-      await paymentController.deleteMethod(id);
-      _showMessage('Способ оплаты удалён');
-    } catch (e) {
-      _showMessage('Ошибка: $e');
-    }
+    await paymentController.deleteMethod(id);
+    _showMessage('Способ оплаты удалён');
   }
 
-  int _sectionIndex(String id) {
-    switch (id) {
-      case 'info':
-        return 0;
-      case 'loyalty':
-        return 1;
-      case 'settings':
-        return 2;
-      default:
-        return 0;
-    }
-  }
-
-  Alignment _tabAlignment() {
-    switch (_sectionIndex(activeSection)) {
-      case 0:
-        return Alignment.centerLeft;
-      case 1:
-        return Alignment.center;
-      case 2:
-        return Alignment.centerRight;
-      default:
-        return Alignment.centerLeft;
-    }
-  }
-
-  Widget _animatedSegmentedNavigation(BuildContext context) {
-    final bool isDark = Theme.of(context).brightness == Brightness.dark;
-    final Color trackColor =
-    isDark ? AppColors.darkSurfaceSoft : AppColors.primaryLight;
-
-    return _card(
-      context,
-      padding: const EdgeInsets.all(6),
-      child: SizedBox(
-        height: 68,
-        child: LayoutBuilder(
-          builder: (BuildContext context, BoxConstraints constraints) {
-            final double segmentWidth = (constraints.maxWidth - 12) / 3;
-
-            return Stack(
-              children: [
-                AnimatedAlign(
-                  duration: _tabAnimationDuration,
-                  curve: _tabCurve,
-                  alignment: _tabAlignment(),
-                  child: Container(
-                    width: segmentWidth,
-                    margin: const EdgeInsets.symmetric(horizontal: 0),
-                    decoration: BoxDecoration(
-                      gradient: isDark
-                          ? AppColors.darkBrandGradient
-                          : AppColors.brandGradient,
-                      borderRadius: BorderRadius.circular(18),
-                      boxShadow: [
-                        BoxShadow(
-                          color: (isDark ? AppColors.purple : AppColors.primary)
-                              .withOpacity(0.18),
-                          blurRadius: 16,
-                          offset: const Offset(0, 8),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                Row(
-                  children: [
-                    _tabButton(
-                      context,
-                      id: 'info',
-                      label: 'Данные',
-                      icon: Icons.person_outline_rounded,
-                    ),
-                    _tabButton(
-                      context,
-                      id: 'loyalty',
-                      label: 'Лояльность',
-                      icon: Icons.card_giftcard_rounded,
-                    ),
-                    _tabButton(
-                      context,
-                      id: 'settings',
-                      label: 'Настройки',
-                      icon: Icons.settings_outlined,
-                    ),
-                  ],
-                ),
-              ],
-            );
-          },
-        ),
-      ),
-    );
-  }
-
-  Widget _tabButton(
-      BuildContext context, {
-        required String id,
-        required String label,
-        required IconData icon,
-      }) {
-    final bool isActive = activeSection == id;
+  Widget _sectionButton({
+    required String id,
+    required String title,
+    required IconData icon,
+  }) {
+    final bool selected = activeSection == id;
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
 
-    final Color inactiveColor = isDark
-        ? AppColors.darkMutedForeground
-        : AppColors.mutedForeground;
+    final Color inactiveColor =
+    isDark ? AppColors.darkMutedForeground : AppColors.mutedForeground;
 
     return Expanded(
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(18),
-          onTap: () => _changeSection(id),
-          child: SizedBox(
-            height: 68,
-            child: AnimatedScale(
-              scale: isActive ? 1 : 0.98,
-              duration: _tabAnimationDuration,
-              curve: _tabCurve,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  AnimatedSwitcher(
-                    duration: _tabAnimationDuration,
-                    transitionBuilder: (Widget child, Animation<double> anim) {
-                      return FadeTransition(
-                        opacity: anim,
-                        child: ScaleTransition(
-                          scale: anim.drive(
-                            Tween<double>(begin: 0.92, end: 1),
-                          ),
-                          child: child,
-                        ),
-                      );
-                    },
-                    child: Icon(
-                      icon,
-                      key: ValueKey<String>('${id}_$isActive'),
-                      color: isActive ? Colors.white : inactiveColor,
-                      size: isActive ? 21 : 20,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  AnimatedDefaultTextStyle(
-                    duration: _tabAnimationDuration,
-                    curve: _tabCurve,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: isActive ? Colors.white : inactiveColor,
-                      fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
-                    ),
-                    child: Text(label),
-                  ),
-                ],
+      child: InkWell(
+        borderRadius: BorderRadius.circular(18),
+        onTap: () => _changeSection(id),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 220),
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(
+            gradient: selected
+                ? (isDark
+                ? AppColors.darkBrandGradient
+                : AppColors.brandGradient)
+                : null,
+            borderRadius: BorderRadius.circular(18),
+            boxShadow: selected
+                ? [
+              BoxShadow(
+                color: (isDark ? AppColors.purple : AppColors.primary)
+                    .withValues(alpha: 0.18),
+                blurRadius: 16,
+                offset: const Offset(0, 8),
               ),
-            ),
+            ]
+                : [],
+          ),
+          child: Column(
+            children: [
+              Icon(
+                icon,
+                color: selected ? Colors.white : inactiveColor,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                title,
+                style: TextStyle(
+                  color: selected ? Colors.white : inactiveColor,
+                  fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                  fontSize: 12,
+                ),
+              ),
+            ],
           ),
         ),
       ),
     );
   }
 
-  Widget _inputField(
-      BuildContext context,
-      String label,
-      TextEditingController controller,
-      Function(String) onChange,
-      ) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: TextField(
-        enabled: isEditing,
-        controller: controller,
-        onChanged: onChange,
-        decoration: InputDecoration(labelText: label),
+  Widget _navigation() {
+    return _card(
+      padding: const EdgeInsets.all(8),
+      child: Row(
+        children: [
+          _sectionButton(
+            id: 'info',
+            title: 'Данные',
+            icon: Icons.person_outline_rounded,
+          ),
+          _sectionButton(
+            id: 'loyalty',
+            title: 'Лояльность',
+            icon: Icons.card_giftcard_rounded,
+          ),
+          _sectionButton(
+            id: 'settings',
+            title: 'Настройки',
+            icon: Icons.settings_outlined,
+          ),
+        ],
       ),
     );
   }
 
-  Widget _card(
-      BuildContext context, {
-        required Widget child,
-        EdgeInsets? padding,
-      }) {
+  Widget _card({
+    required Widget child,
+    EdgeInsets padding = const EdgeInsets.all(16),
+  }) {
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
-    final Color borderColor = isDark ? AppColors.darkBorder : AppColors.border;
 
     return Container(
       width: double.infinity,
-      padding: padding ?? const EdgeInsets.all(16),
+      padding: padding,
       decoration: BoxDecoration(
         gradient: isDark ? AppColors.darkCardGradient : null,
         color: isDark ? null : Colors.white,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: borderColor),
+        border: Border.all(
+          color: isDark ? AppColors.darkBorder : AppColors.border,
+        ),
         boxShadow: [
           BoxShadow(
             color: isDark
-                ? AppColors.purple.withOpacity(0.05)
+                ? AppColors.purple.withValues(alpha: 0.05)
                 : AppColors.shadow,
             blurRadius: 18,
             offset: const Offset(0, 8),
@@ -724,38 +484,287 @@ class _ProfileScreenState extends State<ProfileScreen>
     );
   }
 
-  Widget _buildPaymentMethodTile(
-      BuildContext context,
-      PaymentMethodModel method,
-      ) {
+  Widget _inputField(
+      String label,
+      TextEditingController controller,
+      void Function(String value) onChanged, {
+        TextInputType? keyboardType,
+        List<TextInputFormatter>? inputFormatters,
+      }) {
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 240),
-      curve: Curves.easeOutCubic,
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: TextField(
+        enabled: isEditing,
+        controller: controller,
+        keyboardType: keyboardType,
+        inputFormatters: inputFormatters,
+        onChanged: onChanged,
+        decoration: InputDecoration(
+          labelText: label,
+          filled: true,
+          fillColor: isDark ? AppColors.darkSurfaceElevated : Colors.white,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: BorderSide(
+              color: isDark ? AppColors.darkBorder : AppColors.border,
+            ),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: BorderSide(
+              color: isDark ? AppColors.darkBorder : AppColors.border,
+            ),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: BorderSide(
+              color: isDark ? AppColors.purple : AppColors.primary,
+              width: 1.4,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInfoSection() {
+    final User? user = editedUser;
+
+    if (user == null) {
+      return _card(
+        child: const Text('Профиль не загружен'),
+      );
+    }
+
+    return Column(
+      children: [
+        _card(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'Личные данные',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                  if (!isEditing)
+                    IconButton(
+                      onPressed: _startEditing,
+                      icon: const Icon(Icons.edit_outlined),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              _inputField(
+                'Имя',
+                nameController,
+                    (String value) {
+                  editedUser = editedUser?.copyWith(name: value);
+                },
+              ),
+              _inputField(
+                'Телефон',
+                phoneController,
+                    (String value) {
+                  editedUser = editedUser?.copyWith(phone: value);
+                },
+                keyboardType: TextInputType.phone,
+                inputFormatters: [
+                  PhoneInputFormatter(),
+                ],
+              ),
+              _inputField(
+                'Почта',
+                emailController,
+                    (String value) {
+                  editedUser = editedUser?.copyWith(email: value);
+                },
+                keyboardType: TextInputType.emailAddress,
+              ),
+              if (isEditing) ...[
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: _cancelEditing,
+                        child: const Text('Отмена'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: Theme.of(context).brightness ==
+                              Brightness.dark
+                              ? AppColors.darkBrandGradient
+                              : AppColors.brandGradient,
+                          borderRadius: BorderRadius.circular(18),
+                        ),
+                        child: ElevatedButton(
+                          onPressed: _saveProfile,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.transparent,
+                            shadowColor: Colors.transparent,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(18),
+                            ),
+                          ),
+                          child: const Text('Сохранить'),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        ProfileAddressSection(
+          controller: addressBookController,
+          onMessage: _showMessage,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLoyaltySection() {
+    final User? user = editedUser;
+
+    if (user == null) {
+      return _card(
+        child: const Text('Данные лояльности не загружены'),
+      );
+    }
+
+    final double spentFromOrders = orderController.orders.fold(
+      0,
+          (double sum, order) => sum + order.total,
+    );
+
+    final double totalSpent =
+    spentFromOrders > user.totalSpent ? spentFromOrders : user.totalSpent;
+
+    String level = 'Bronze';
+    int nextLevel = 5000;
+
+    if (totalSpent >= 15000) {
+      level = 'Gold';
+      nextLevel = totalSpent.round();
+    } else if (totalSpent >= 5000) {
+      level = 'Silver';
+      nextLevel = 15000;
+    }
+
+    final int points = totalSpent.round();
+    final int remaining = (nextLevel - totalSpent).clamp(0, nextLevel).round();
+
+    return _card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Программа лояльности',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              gradient: Theme.of(context).brightness == Brightness.dark
+                  ? AppColors.darkBrandGradient
+                  : AppColors.brandGradient,
+              borderRadius: BorderRadius.circular(24),
+              boxShadow: [
+                BoxShadow(
+                  color: (Theme.of(context).brightness == Brightness.dark
+                      ? AppColors.purple
+                      : AppColors.primary)
+                      .withValues(alpha: 0.18),
+                  blurRadius: 18,
+                  offset: const Offset(0, 8),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  level,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 26,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '$points бонусов',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Покупок на ${totalSpent.toStringAsFixed(0)} ₽',
+                  style: const TextStyle(color: Colors.white),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          if (level != 'Gold')
+            Text(
+              'До следующего уровня осталось $remaining ₽',
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            )
+          else
+            const Text(
+              'Максимальный уровень достигнут',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _paymentMethodTile(PaymentMethodModel method) {
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Container(
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: isDark
-            ? AppColors.darkSurfaceElevated
-            : AppColors.primaryLight.withOpacity(0.35),
+        color: isDark ? AppColors.darkSurfaceElevated : AppColors.primaryLight,
         borderRadius: BorderRadius.circular(18),
         border: Border.all(
           color: isDark ? AppColors.darkBorder : Colors.transparent,
         ),
       ),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 240),
-            curve: Curves.easeOutCubic,
+          Container(
             width: 46,
             height: 46,
             decoration: BoxDecoration(
-              gradient: isDark
-                  ? AppColors.darkBrandGradient
-                  : AppColors.brandGradient,
+              gradient:
+              isDark ? AppColors.darkBrandGradient : AppColors.brandGradient,
               borderRadius: BorderRadius.circular(14),
             ),
             child: Icon(
@@ -770,73 +779,31 @@ class _ProfileScreenState extends State<ProfileScreen>
               children: [
                 Text(
                   method.title,
-                  style: TextStyle(
+                  style: const TextStyle(
                     fontWeight: FontWeight.w700,
-                    fontSize: 16,
-                    color: Theme.of(context).colorScheme.onSurface,
                   ),
                 ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: isDark
-                            ? AppColors.darkSurfaceSoft
-                            : Colors.white,
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                      child: Text(
-                        method.displayBadge,
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: isDark
-                              ? AppColors.purpleLight
-                              : AppColors.primary,
-                        ),
-                      ),
+                if (method.subtitle.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    method.subtitle,
+                    style: TextStyle(
+                      color: isDark
+                          ? AppColors.darkMutedForeground
+                          : AppColors.mutedForeground,
                     ),
-                    if (method.isDefault)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: isDark
-                              ? AppColors.darkSurfaceSoft
-                              : Colors.white,
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                        child: Text(
-                          'По умолчанию',
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                            color: isDark
-                                ? AppColors.purpleLight
-                                : AppColors.primary,
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  method.subtitle,
-                  style: TextStyle(
-                    color: isDark
-                        ? AppColors.darkMutedForeground
-                        : AppColors.mutedForeground,
                   ),
-                ),
+                ],
+                if (method.isDefault) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    'По умолчанию',
+                    style: TextStyle(
+                      color: isDark ? AppColors.purpleLight : AppColors.primary,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -851,45 +818,30 @@ class _ProfileScreenState extends State<ProfileScreen>
               }
             },
             itemBuilder: (BuildContext context) {
-              final List<PopupMenuEntry<String>> items = [
+              return [
                 const PopupMenuItem(
                   value: 'default',
                   child: Text('Сделать основным'),
                 ),
-              ];
-
-              if (method.isCard && !method.isSystem) {
-                items.add(
+                if (method.isCard && !method.isSystem)
                   const PopupMenuItem(
                     value: 'edit',
-                    child: Text('Редактировать'),
+                    child: Text('Изменить'),
                   ),
-                );
-                items.add(
+                if (method.isCard && !method.isSystem)
                   const PopupMenuItem(
                     value: 'delete',
                     child: Text('Удалить'),
                   ),
-                );
-              }
-
-              return items;
+              ];
             },
-            icon: Icon(
-              Icons.more_vert_rounded,
-              color: isDark
-                  ? AppColors.purpleLight
-                  : AppColors.mutedForeground,
-            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildSettingsSection(BuildContext context) {
-    final bool isDark = Theme.of(context).brightness == Brightness.dark;
-
+  Widget _buildSettingsSection() {
     return Obx(() {
       final bool notificationsEnabled = _notificationsEnabled();
       final List<PaymentMethodModel> methods = paymentController.paymentMethods;
@@ -897,7 +849,6 @@ class _ProfileScreenState extends State<ProfileScreen>
       return Column(
         children: [
           _card(
-            context,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -914,130 +865,41 @@ class _ProfileScreenState extends State<ProfileScreen>
                   title: const Text('Уведомления'),
                   subtitle: Text(
                     notificationsEnabled
-                        ? 'Все уведомления включены'
-                        : 'Все уведомления выключены',
-                    style: TextStyle(
-                      color: isDark
-                          ? AppColors.darkMutedForeground
-                          : AppColors.mutedForeground,
-                    ),
+                        ? 'Уведомления включены'
+                        : 'Уведомления выключены',
                   ),
                   value: notificationsEnabled,
-                  activeThumbColor:
-                  isDark ? AppColors.purple : AppColors.primary,
+                  activeColor: Theme.of(context).brightness == Brightness.dark
+                      ? AppColors.purple
+                      : AppColors.primary,
                   onChanged: _toggleAllNotifications,
                 ),
-                const Divider(),
                 ListTile(
                   contentPadding: EdgeInsets.zero,
-                  leading: Container(
-                    width: 42,
-                    height: 42,
-                    decoration: BoxDecoration(
-                      gradient: isDark
-                          ? AppColors.darkBrandGradient
-                          : AppColors.brandGradient,
-                      borderRadius: BorderRadius.circular(14),
-                    ),
-                    child: const Icon(
-                      Icons.notifications_active_rounded,
-                      color: Colors.white,
-                    ),
+                  leading: Icon(
+                    Icons.notifications_active_outlined,
+                    color: Theme.of(context).brightness == Brightness.dark
+                        ? AppColors.purpleLight
+                        : AppColors.primary,
                   ),
                   title: const Text('Проверить уведомления'),
-                  subtitle: Text(
-                    'Показать системное тестовое уведомление',
-                    style: TextStyle(
-                      color: isDark
-                          ? AppColors.darkMutedForeground
-                          : AppColors.mutedForeground,
-                    ),
-                  ),
-                  trailing: Icon(
-                    Icons.chevron_right_rounded,
-                    color: isDark
-                        ? AppColors.purpleLight
-                        : AppColors.mutedForeground,
-                  ),
+                  subtitle: const Text('Показать тестовое уведомление'),
                   onTap: _sendTestNotification,
                 ),
-                const Divider(),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   title: const Text('Тёмная тема'),
-                  subtitle: Text(
-                    settingsController.darkTheme.value
-                        ? 'Тёмное оформление включено'
-                        : 'Светлое оформление включено',
-                    style: TextStyle(
-                      color: isDark
-                          ? AppColors.darkMutedForeground
-                          : AppColors.mutedForeground,
-                    ),
-                  ),
                   value: settingsController.darkTheme.value,
-                  activeThumbColor:
-                  isDark ? AppColors.purple : AppColors.primary,
-                  onChanged: (bool val) => settingsController.setDarkTheme(val),
+                  activeColor: Theme.of(context).brightness == Brightness.dark
+                      ? AppColors.purple
+                      : AppColors.primary,
+                  onChanged: settingsController.setDarkTheme,
                 ),
               ],
             ),
           ),
           const SizedBox(height: 12),
           _card(
-            context,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Демо-режим',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  'Сброс вернёт приложение к начальному состоянию для показа на защите.',
-                  style: TextStyle(
-                    color: isDark
-                        ? AppColors.darkMutedForeground
-                        : AppColors.mutedForeground,
-                    height: 1.45,
-                  ),
-                ),
-                const SizedBox(height: 14),
-                SizedBox(
-                  width: double.infinity,
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: isDark
-                          ? AppColors.darkBrandGradient
-                          : AppColors.brandGradient,
-                      borderRadius: BorderRadius.circular(18),
-                    ),
-                    child: ElevatedButton.icon(
-                      onPressed: _resetDemoData,
-                      icon: const Icon(Icons.restart_alt_rounded),
-                      label: const Text('Сбросить демо-данные'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.transparent,
-                        shadowColor: Colors.transparent,
-                        foregroundColor: Colors.white,
-                        minimumSize: const Size.fromHeight(54),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(18),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
-          _card(
-            context,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -1054,46 +916,61 @@ class _ProfileScreenState extends State<ProfileScreen>
                     ),
                     TextButton.icon(
                       onPressed: _showAddCardDialog,
-                      icon: Icon(
-                        Icons.add_rounded,
-                        color: isDark
-                            ? AppColors.purpleLight
-                            : AppColors.primary,
-                      ),
-                      label: Text(
-                        'Добавить карту',
-                        style: TextStyle(
-                          color: isDark
-                              ? AppColors.purpleLight
-                              : AppColors.primary,
-                        ),
-                      ),
+                      icon: const Icon(Icons.add_rounded),
+                      label: const Text('Добавить карту'),
                     ),
                   ],
                 ),
                 const SizedBox(height: 10),
-                Text(
-                  'Сохранённые методы оплаты используются при оформлении заказа. Полные реквизиты карты и CVV не хранятся.',
+                if (methods.isEmpty)
+                  const Text('Способы оплаты пока не добавлены')
+                else
+                  ...methods.map(_paymentMethodTile),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          _card(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Демо-режим',
                   style: TextStyle(
-                    color: isDark
-                        ? AppColors.darkMutedForeground
-                        : AppColors.mutedForeground,
-                    height: 1.4,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
                   ),
                 ),
                 const SizedBox(height: 12),
-                if (methods.isEmpty)
-                  Text(
-                    'У вас пока нет способов оплаты',
-                    style: TextStyle(
-                      color: isDark
-                          ? AppColors.darkMutedForeground
-                          : AppColors.mutedForeground,
+                const Text(
+                  'Сброс вернёт приложение к начальному состоянию для показа на защите.',
+                ),
+                const SizedBox(height: 14),
+                SizedBox(
+                  width: double.infinity,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: Theme.of(context).brightness == Brightness.dark
+                          ? AppColors.darkBrandGradient
+                          : AppColors.brandGradient,
+                      borderRadius: BorderRadius.circular(18),
                     ),
-                  )
-                else
-                  ...methods
-                      .map((method) => _buildPaymentMethodTile(context, method)),
+                    child: ElevatedButton.icon(
+                      onPressed: _resetDemoData,
+                      icon: const Icon(Icons.restart_alt_rounded),
+                      label: const Text('Сбросить демо-данные'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.transparent,
+                        shadowColor: Colors.transparent,
+                        foregroundColor: Colors.white,
+                        minimumSize: const Size.fromHeight(48),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(18),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
@@ -1102,302 +979,30 @@ class _ProfileScreenState extends State<ProfileScreen>
     });
   }
 
-  Widget _buildProfileActions(BuildContext context, bool isDark) {
-    if (!isEditing) {
-      return Align(
-        alignment: Alignment.centerRight,
-        child: TextButton.icon(
-          onPressed: _startEditing,
-          icon: Icon(
-            Icons.edit_outlined,
-            size: 18,
-            color: isDark ? AppColors.purpleLight : AppColors.primary,
-          ),
-          label: Text(
-            'Редактировать',
-            style: TextStyle(
-              color: isDark ? AppColors.purpleLight : AppColors.primary,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          style: TextButton.styleFrom(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14),
-            ),
-          ),
-        ),
-      );
+  Widget _activeSection() {
+    if (activeSection == 'loyalty') {
+      return _buildLoyaltySection();
     }
 
-    return Row(
-      children: [
-        Expanded(
-          child: OutlinedButton(
-            onPressed: handleCancel,
-            style: OutlinedButton.styleFrom(
-              foregroundColor:
-              isDark ? AppColors.purpleLight : AppColors.primary,
-              side: BorderSide(
-                color: isDark ? AppColors.darkBorder : AppColors.border,
-              ),
-              minimumSize: const Size.fromHeight(46),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
-              ),
-            ),
-            child: const Text('Отмена'),
-          ),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: isDark
-                  ? AppColors.darkBrandGradient
-                  : AppColors.brandGradient,
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: ElevatedButton(
-              onPressed: handleSave,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.transparent,
-                shadowColor: Colors.transparent,
-                foregroundColor: Colors.white,
-                minimumSize: const Size.fromHeight(46),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
-                ),
-              ),
-              child: const Text('Сохранить'),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildInfoSection(BuildContext context, User user) {
-    final bool isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return _card(
-      context,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Личные данные',
-            style: TextStyle(
-              fontWeight: FontWeight.w800,
-              fontSize: 20,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Редактируйте основные данные профиля',
-            style: TextStyle(
-              fontSize: 13,
-              color: isDark
-                  ? AppColors.darkMutedForeground
-                  : AppColors.mutedForeground,
-            ),
-          ),
-          const SizedBox(height: 14),
-          _buildProfileActions(context, isDark),
-          const SizedBox(height: 16),
-          _inputField(
-            context,
-            'Имя',
-            nameController,
-                (String val) => editedUser = editedUser?.copyWith(name: val),
-          ),
-          _inputField(
-            context,
-            'Email',
-            emailController,
-                (String val) => editedUser = editedUser?.copyWith(email: val),
-          ),
-          _inputField(
-            context,
-            'Телефон',
-            phoneController,
-                (String val) => editedUser = editedUser?.copyWith(phone: val),
-          ),
-          _inputField(
-            context,
-            'Адрес доставки',
-            addressController,
-                (String val) => editedUser = editedUser?.copyWith(address: val),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildLoyaltySection(User user) {
-    final LoyaltyPreviewData loyalty = _buildLoyaltyPreview(user);
-
-    return Column(
-      children: [
-        LoyaltyCard(
-          level: loyalty.level,
-          points: loyalty.points,
-          totalSpent: loyalty.totalSpent,
-          nextLevelPoints: loyalty.nextLevelPoints,
-          colorHex: loyalty.colorHex,
-          nextLevelLabel: loyalty.nextLevelLabel,
-        ),
-        const SizedBox(height: 12),
-        _card(
-          context,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Как работает статус',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const SizedBox(height: 12),
-              const _LoyaltyRuleRow(
-                title: 'Bronze',
-                subtitle: 'до 4 999 ₽ покупок',
-                color: '#CD7F32',
-              ),
-              const SizedBox(height: 10),
-              const _LoyaltyRuleRow(
-                title: 'Silver',
-                subtitle: 'от 5 000 ₽ до 14 999 ₽',
-                color: '#AAB7C7',
-              ),
-              const SizedBox(height: 10),
-              const _LoyaltyRuleRow(
-                title: 'Gold',
-                subtitle: 'от 15 000 ₽ и выше',
-                color: '#E0B94A',
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildAnimatedSectionContent(User user) {
-    Widget content;
-
-    switch (activeSection) {
-      case 'loyalty':
-        content = _buildLoyaltySection(user);
-        break;
-      case 'settings':
-        content = _buildSettingsSection(context);
-        break;
-      case 'info':
-      default:
-        content = _buildInfoSection(context, user);
-        break;
+    if (activeSection == 'settings') {
+      return _buildSettingsSection();
     }
 
-    return AnimatedSwitcher(
-      duration: _sectionAnimationDuration,
-      reverseDuration: const Duration(milliseconds: 220),
-      switchInCurve: _contentCurve,
-      switchOutCurve: Curves.easeInCubic,
-      transitionBuilder: (Widget child, Animation<double> animation) {
-        final Animation<Offset> offsetAnimation = Tween<Offset>(
-          begin: const Offset(0.04, 0),
-          end: Offset.zero,
-        ).animate(
-          CurvedAnimation(
-            parent: animation,
-            curve: Curves.easeOutCubic,
-          ),
-        );
-
-        return FadeTransition(
-          opacity: animation,
-          child: SlideTransition(
-            position: offsetAnimation,
-            child: child,
-          ),
-        );
-      },
-      child: KeyedSubtree(
-        key: ValueKey<String>(activeSection),
-        child: content,
-      ),
-    );
+    return _buildInfoSection();
   }
 
   @override
   Widget build(BuildContext context) {
-    final Color bg = Theme.of(context).scaffoldBackgroundColor;
-    final Color onSurface = Theme.of(context).colorScheme.onSurface;
+    final User? user = editedUser;
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
 
-    if (isLoading) {
-      return Scaffold(
-        backgroundColor: bg,
-        body: Center(
-          child: CircularProgressIndicator(
-            color: isDark ? AppColors.purple : AppColors.primary,
-          ),
-        ),
-      );
-    }
-
-    if (editedUser == null) {
-      return Scaffold(
-        backgroundColor: bg,
-        body: const Center(
-          child: Text('Нет данных профиля'),
-        ),
-      );
-    }
-
-    final User user = editedUser!;
-    final LoyaltyPreviewData loyaltyPreview = _buildLoyaltyPreview(user);
-
     return Scaffold(
-      backgroundColor: bg,
       appBar: AppBar(
-        title: Text(
-          'Профиль',
-          style: TextStyle(
-            fontWeight: FontWeight.w700,
-            color: onSurface,
-          ),
-        ),
+        title: const Text('Профиль'),
         actions: [
           IconButton(
-            onPressed: _loadProfile,
-            icon: Icon(
-              Icons.refresh_rounded,
-              color: isDark ? AppColors.purpleLight : AppColors.primary,
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.only(right: 12),
-            child: GestureDetector(
-              onTap: handleLogout,
-              child: Container(
-                width: 42,
-                height: 42,
-                decoration: BoxDecoration(
-                  gradient: isDark
-                      ? AppColors.darkBrandGradient
-                      : AppColors.brandGradient,
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.logout_rounded,
-                  color: Colors.white,
-                ),
-              ),
-            ),
+            onPressed: _logout,
+            icon: const Icon(Icons.logout_rounded),
           ),
         ],
       ),
@@ -1414,120 +1019,87 @@ class _ProfileScreenState extends State<ProfileScreen>
           )
               : null,
         ),
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: Column(
+        child: isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : user == null
+            ? const Center(child: Text('Пользователь не найден'))
+            : RefreshIndicator(
+          onRefresh: _loadProfile,
+          child: ListView(
+            padding: const EdgeInsets.all(16),
             children: [
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 260),
-                curve: Curves.easeOutCubic,
-                child: _card(
-                  context,
-                  child: Row(
-                    children: [
-                      AnimatedContainer(
-                        duration: const Duration(milliseconds: 260),
-                        curve: Curves.easeOutCubic,
-                        width: 68,
-                        height: 68,
-                        decoration: BoxDecoration(
-                          gradient: isDark
-                              ? AppColors.darkBrandGradient
-                              : AppColors.brandGradient,
-                          shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(
-                              color:
-                              (isDark ? AppColors.purple : AppColors.primary)
-                                  .withOpacity(0.18),
-                              blurRadius: 16,
-                              offset: const Offset(0, 8),
-                            ),
-                          ],
-                        ),
-                        child: Center(
-                          child: Text(
-                            user.name.isNotEmpty
-                                ? user.name
-                                .split(' ')
-                                .where((String n) => n.isNotEmpty)
-                                .map((String n) => n[0])
-                                .join()
-                                .toUpperCase()
-                                : 'U',
-                            style: const TextStyle(
-                              fontSize: 22,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.white,
-                            ),
-                          ),
+              _card(
+                child: Row(
+                  children: [
+                    Container(
+                      width: 68,
+                      height: 68,
+                      decoration: BoxDecoration(
+                        gradient: isDark
+                            ? AppColors.darkBrandGradient
+                            : AppColors.brandGradient,
+                        shape: BoxShape.circle,
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        user.name.isNotEmpty
+                            ? user.name[0].toUpperCase()
+                            : 'U',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 26,
+                          fontWeight: FontWeight.w800,
                         ),
                       ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            AnimatedDefaultTextStyle(
-                              duration: const Duration(milliseconds: 240),
-                              curve: Curves.easeOutCubic,
-                              style: TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.w700,
-                                color: onSurface,
-                              ),
-                              child: Text(user.name),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            user.name,
+                            style: const TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.w800,
                             ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            user.email,
+                            style: TextStyle(
+                              color: isDark
+                                  ? AppColors.darkMutedForeground
+                                  : AppColors.mutedForeground,
+                            ),
+                          ),
+                          if (user.phone.isNotEmpty) ...[
                             const SizedBox(height: 4),
                             Text(
-                              user.email,
+                              user.phone,
                               style: TextStyle(
                                 color: isDark
                                     ? AppColors.darkMutedForeground
                                     : AppColors.mutedForeground,
                               ),
                             ),
-                            const SizedBox(height: 8),
-                            AnimatedContainer(
-                              duration: const Duration(milliseconds: 260),
-                              curve: Curves.easeOutCubic,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 6,
-                              ),
-                              decoration: BoxDecoration(
-                                color: isDark
-                                    ? AppColors.darkSurfaceElevated
-                                    : AppColors.primaryLight,
-                                borderRadius: BorderRadius.circular(999),
-                                border: Border.all(
-                                  color: isDark
-                                      ? AppColors.darkBorder
-                                      : Colors.transparent,
-                                ),
-                              ),
-                              child: Text(
-                                '${loyaltyPreview.level} • ${loyaltyPreview.points} баллов',
-                                style: TextStyle(
-                                  color: isDark
-                                      ? AppColors.purpleLight
-                                      : AppColors.primary,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ),
                           ],
-                        ),
+                        ],
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 14),
-              _animatedSegmentedNavigation(context),
-              const SizedBox(height: 14),
-              _buildAnimatedSectionContent(user),
+              const SizedBox(height: 12),
+              _navigation(),
+              const SizedBox(height: 12),
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 240),
+                child: KeyedSubtree(
+                  key: ValueKey(activeSection),
+                  child: _activeSection(),
+                ),
+              ),
             ],
           ),
         ),
@@ -1538,16 +1110,16 @@ class _ProfileScreenState extends State<ProfileScreen>
 
 class PaymentCardFormResult {
   final String cardNumber;
+  final String holderName;
   final String expiryMonth;
   final String expiryYear;
-  final String? cvv;
   final bool setAsDefault;
 
   const PaymentCardFormResult({
     required this.cardNumber,
+    required this.holderName,
     required this.expiryMonth,
     required this.expiryYear,
-    this.cvv,
     required this.setAsDefault,
   });
 }
@@ -1565,101 +1137,54 @@ class _PaymentCardBottomSheet extends StatefulWidget {
 }
 
 class _PaymentCardBottomSheetState extends State<_PaymentCardBottomSheet> {
-  late final TextEditingController cardNumberController;
-  late final TextEditingController monthController;
-  late final TextEditingController yearController;
-  late final TextEditingController cvvController;
+  final TextEditingController cardNumberController = TextEditingController();
+  final TextEditingController holderNameController = TextEditingController();
+  final TextEditingController expiryMonthController = TextEditingController();
+  final TextEditingController expiryYearController = TextEditingController();
 
   bool setAsDefault = false;
-
-  bool get isEdit => widget.method != null;
 
   @override
   void initState() {
     super.initState();
 
-    cardNumberController =
-        TextEditingController(text: widget.method?.maskedNumber ?? '');
-    monthController =
-        TextEditingController(text: widget.method?.expiryMonth ?? '');
-    yearController =
-        TextEditingController(text: widget.method?.expiryYear ?? '');
-    cvvController = TextEditingController();
-    setAsDefault = widget.method?.isDefault ?? false;
+    final PaymentMethodModel? method = widget.method;
+
+    if (method != null) {
+      cardNumberController.text = method.maskedNumber;
+      expiryMonthController.text = method.expiryMonth?.toString() ?? '';
+      expiryYearController.text = method.expiryYear?.toString() ?? '';
+      setAsDefault = method.isDefault;
+    }
   }
 
   @override
   void dispose() {
-    FocusManager.instance.primaryFocus?.unfocus();
     cardNumberController.dispose();
-    monthController.dispose();
-    yearController.dispose();
-    cvvController.dispose();
+    holderNameController.dispose();
+    expiryMonthController.dispose();
+    expiryYearController.dispose();
     super.dispose();
-  }
-
-  String _digitsOnly(String value) => value.replaceAll(RegExp(r'[^0-9]'), '');
-
-  String _formatCardNumber(String value) {
-    final String digits = _digitsOnly(value);
-    final String limited = digits.length > 16 ? digits.substring(0, 16) : digits;
-
-    final List<String> chunks = <String>[];
-    for (int i = 0; i < limited.length; i += 4) {
-      final int end = (i + 4 < limited.length) ? i + 4 : limited.length;
-      chunks.add(limited.substring(i, end));
-    }
-
-    return chunks.join(' ');
   }
 
   void _submit() {
     final String cardNumber = cardNumberController.text.trim();
-    final String expiryMonth = monthController.text.trim();
-    final String expiryYear = yearController.text.trim();
-    final String cvv = cvvController.text.trim();
+    final String month = expiryMonthController.text.trim();
+    final String year = expiryYearController.text.trim();
 
-    if (!isEdit) {
-      final String digits = _digitsOnly(cardNumber);
-      if (digits.length != 16) {
-        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-          const SnackBar(content: Text('Номер карты должен содержать 16 цифр')),
-        );
-        return;
-      }
-
-      if (cvv.length != 3 || int.tryParse(cvv) == null) {
-        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-          const SnackBar(content: Text('CVV должен содержать 3 цифры')),
-        );
-        return;
-      }
-    }
-
-    final int? month = int.tryParse(expiryMonth);
-    if (month == null || month < 1 || month > 12) {
-      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-        const SnackBar(content: Text('Введите корректный месяц')),
+    if (cardNumber.isEmpty || month.isEmpty || year.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Заполните данные карты')),
       );
       return;
     }
-
-    final String normalizedYear = _digitsOnly(expiryYear);
-    if (normalizedYear.length != 2) {
-      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-        const SnackBar(content: Text('Введите год в формате ГГ')),
-      );
-      return;
-    }
-
-    FocusScope.of(context).unfocus();
 
     Navigator.of(context).pop(
       PaymentCardFormResult(
         cardNumber: cardNumber,
-        expiryMonth: expiryMonth.padLeft(2, '0'),
-        expiryYear: normalizedYear,
-        cvv: isEdit ? null : cvv,
+        holderName: holderNameController.text.trim(),
+        expiryMonth: month,
+        expiryYear: year,
         setAsDefault: setAsDefault,
       ),
     );
@@ -1667,200 +1192,129 @@ class _PaymentCardBottomSheetState extends State<_PaymentCardBottomSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final bool isEdit = widget.method != null;
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Padding(
-      padding: EdgeInsets.fromLTRB(
-        20,
-        20,
-        20,
-        MediaQuery.of(context).viewInsets.bottom + 20,
+    return Container(
+      decoration: BoxDecoration(
+        gradient: isDark ? AppColors.darkCardGradient : null,
+        color: isDark ? null : Theme.of(context).cardColor,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
       ),
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              isEdit ? 'Редактировать карту' : 'Добавить карту',
-              style: const TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w800,
+      child: Padding(
+        padding: EdgeInsets.only(
+          left: 18,
+          right: 18,
+          top: 18,
+          bottom: MediaQuery.of(context).viewInsets.bottom + 18,
+        ),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 44,
+                height: 5,
+                decoration: BoxDecoration(
+                  color: isDark ? AppColors.darkBorder : AppColors.border,
+                  borderRadius: BorderRadius.circular(999),
+                ),
               ),
-            ),
-            const SizedBox(height: 18),
-            TextField(
-              controller: cardNumberController,
-              enabled: !isEdit,
-              keyboardType: TextInputType.number,
-              textInputAction: TextInputAction.next,
-              onChanged: isEdit
-                  ? null
-                  : (String value) {
-                final String formatted = _formatCardNumber(value);
-                if (formatted != value) {
-                  cardNumberController.value = TextEditingValue(
-                    text: formatted,
-                    selection: TextSelection.collapsed(
-                      offset: formatted.length,
-                    ),
-                  );
-                }
-              },
-              decoration: InputDecoration(
-                labelText: 'Номер карты',
-                hintText: '0000 0000 0000 0000',
-                helperText: isEdit
-                    ? 'Полный номер карты повторно не хранится'
-                    : 'Сохраняется только маска карты',
-              ),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: monthController,
-                    keyboardType: TextInputType.number,
-                    textInputAction: TextInputAction.next,
-                    decoration: const InputDecoration(
-                      labelText: 'Месяц',
-                      hintText: 'MM',
-                    ),
+              const SizedBox(height: 18),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  isEdit ? 'Изменить карту' : 'Добавить карту',
+                  style: const TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
                   ),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: TextField(
-                    controller: yearController,
-                    keyboardType: TextInputType.number,
-                    textInputAction:
-                    isEdit ? TextInputAction.done : TextInputAction.next,
-                    onSubmitted: isEdit ? (_) => _submit() : null,
-                    decoration: const InputDecoration(
-                      labelText: 'Год',
-                      hintText: 'ГГ',
-                    ),
-                  ),
+              ),
+              const SizedBox(height: 18),
+              TextField(
+                controller: cardNumberController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Номер карты',
+                  hintText: '2202 2022 2022 2022',
                 ),
-              ],
-            ),
-            if (!isEdit) ...[
+              ),
               const SizedBox(height: 12),
               TextField(
-                controller: cvvController,
-                keyboardType: TextInputType.number,
-                obscureText: true,
-                textInputAction: TextInputAction.done,
-                onSubmitted: (_) => _submit(),
+                controller: holderNameController,
+                textCapitalization: TextCapitalization.characters,
                 decoration: const InputDecoration(
-                  labelText: 'CVV/CVC',
-                  hintText: '123',
+                  labelText: 'Имя владельца',
+                  hintText: 'IVAN IVANOV',
+                ),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: expiryMonthController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'Месяц',
+                        hintText: '12',
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextField(
+                      controller: expiryYearController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'Год',
+                        hintText: '2030',
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                value: setAsDefault,
+                activeColor: isDark ? AppColors.purple : AppColors.primary,
+                title: const Text('Сделать картой по умолчанию'),
+                onChanged: (bool value) {
+                  setState(() {
+                    setAsDefault = value;
+                  });
+                },
+              ),
+              const SizedBox(height: 18),
+              SizedBox(
+                width: double.infinity,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient:
+                    isDark ? AppColors.darkBrandGradient : AppColors.brandGradient,
+                    borderRadius: BorderRadius.circular(18),
+                  ),
+                  child: ElevatedButton(
+                    onPressed: _submit,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.transparent,
+                      shadowColor: Colors.transparent,
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size.fromHeight(52),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                    ),
+                    child: const Text('Сохранить'),
+                  ),
                 ),
               ),
             ],
-            const SizedBox(height: 10),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Сделать способом по умолчанию'),
-              value: setAsDefault,
-              activeThumbColor: isDark ? AppColors.purple : AppColors.primary,
-              onChanged: (bool value) {
-                FocusScope.of(context).unfocus();
-                setState(() {
-                  setAsDefault = value;
-                });
-              },
-            ),
-            const SizedBox(height: 12),
-            Text(
-              isEdit
-                  ? 'При редактировании обновляется только срок действия и статус карты по умолчанию.'
-                  : 'CVV не сохраняется. После добавления карты в приложении хранится только маска карты, срок действия и локальный токен.',
-              style: TextStyle(
-                fontSize: 12,
-                height: 1.4,
-                color: isDark
-                    ? AppColors.darkMutedForeground
-                    : AppColors.mutedForeground,
-              ),
-            ),
-            const SizedBox(height: 20),
-            SizedBox(
-              width: double.infinity,
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: isDark
-                      ? AppColors.darkBrandGradient
-                      : AppColors.brandGradient,
-                  borderRadius: BorderRadius.circular(18),
-                ),
-                child: ElevatedButton(
-                  onPressed: _submit,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.transparent,
-                    shadowColor: Colors.transparent,
-                    foregroundColor: Colors.white,
-                    minimumSize: const Size.fromHeight(54),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(18),
-                    ),
-                  ),
-                  child: Text(isEdit ? 'Сохранить' : 'Добавить'),
-                ),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
-    );
-  }
-}
-
-class _LoyaltyRuleRow extends StatelessWidget {
-  final String title;
-  final String subtitle;
-  final String color;
-
-  const _LoyaltyRuleRow({
-    required this.title,
-    required this.subtitle,
-    required this.color,
-  });
-
-  Color _parseColor(String hexColor) {
-    String hex = hexColor.replaceAll('#', '');
-    if (hex.length == 6) {
-      hex = 'FF$hex';
-    }
-    return Color(int.parse(hex, radix: 16));
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final Color badgeColor = _parseColor(color);
-
-    return Row(
-      children: [
-        Container(
-          width: 14,
-          height: 14,
-          decoration: BoxDecoration(
-            color: badgeColor,
-            shape: BoxShape.circle,
-          ),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Text(
-            '$title — $subtitle',
-            style: TextStyle(
-              color: Theme.of(context).colorScheme.onSurface,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ),
-      ],
     );
   }
 }

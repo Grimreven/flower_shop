@@ -11,10 +11,10 @@ import '../helpers/order_tracking_helper.dart';
 import '../models/cart_item.dart' as model;
 import '../models/checkout_summary.dart';
 import '../models/order_model.dart';
+import '../models/delivery_method.dart';
 
 class OrderController extends GetxController {
   final AuthController authController;
-
   late OrderService _orderService;
 
   final RxList<OrderModel> orders = <OrderModel>[].obs;
@@ -52,6 +52,12 @@ class OrderController extends GetxController {
         required String cardMask,
         required String deliveryAddress,
         required String recipientComment,
+        int? addressId,
+        String? recipientName,
+        String? recipientPhone,
+        String? deliveryDate,
+        String? deliveryTimeFrom,
+        String? deliveryTimeTo,
         String promoCode = '',
       }) async {
     if (authController.token.isEmpty) {
@@ -62,7 +68,7 @@ class OrderController extends GetxController {
       final List<Map<String, dynamic>> itemsMaps = items.map((model.CartItem e) {
         final Map<String, dynamic> json = e.toJson();
 
-        return <String, dynamic>{
+        return {
           ...json,
           'product_id': e.product.id,
           'productId': e.product.id,
@@ -72,8 +78,10 @@ class OrderController extends GetxController {
 
       await _orderService.createOrder(
         itemsMaps: itemsMaps,
-        checkoutData: <String, dynamic>{
+        checkoutData: {
           ...summary.toJson(),
+          'address_id': addressId,
+          'addressId': addressId,
           'payment_method': paymentMethod,
           'paymentMethod': paymentMethod,
           'payment_status': paymentStatus,
@@ -84,18 +92,27 @@ class OrderController extends GetxController {
           'fullAddress': deliveryAddress,
           'delivery_address': deliveryAddress,
           'deliveryAddress': deliveryAddress,
-          'recipient_name': authController.user.value?.name ?? '',
-          'recipientName': authController.user.value?.name ?? '',
-          'phone': authController.user.value?.phone ?? '',
+          'recipient_name':
+          recipientName ?? authController.user.value?.name ?? '',
+          'recipientName':
+          recipientName ?? authController.user.value?.name ?? '',
+          'phone': recipientPhone ?? authController.user.value?.phone ?? '',
           'recipient_comment': recipientComment,
           'recipientComment': recipientComment,
           'comment': recipientComment,
           'promo_code': promoCode,
           'promoCode': promoCode,
+          'delivery_method': summary.deliveryMethod == DeliveryMethod.pickup
+              ? 'pickup'
+              : 'delivery',
           'delivery_price': summary.deliveryCost,
           'deliveryPrice': summary.deliveryCost,
+          'delivery_date': deliveryDate,
+          'delivery_time_from': deliveryTimeFrom,
+          'delivery_time_to': deliveryTimeTo,
           'payment_amount': summary.payableTotal,
           'paymentAmount': summary.payableTotal,
+          'provider': 'demo',
         },
       );
 
@@ -172,6 +189,7 @@ class OrderController extends GetxController {
 
     final OrderTrackingStage initialStage =
     OrderTrackingHelper.resolveInitialStage(order.status);
+
     final int initialIndex = OrderTrackingHelper.stageToIndex(initialStage);
 
     trackingStepByOrderId[order.id] = initialIndex;
@@ -220,6 +238,8 @@ class OrderController extends GetxController {
       status: newStatus,
       items: oldOrder.items,
       createdAt: oldOrder.createdAt,
+      delivery: oldOrder.delivery,
+      payment: oldOrder.payment,
     );
 
     orders.refresh();

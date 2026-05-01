@@ -1,238 +1,182 @@
 import 'package:get/get.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
-import '../api/auth_service.dart';
 import '../api/auth_storage.dart';
-import '../api/local_demo_service.dart';
+import '../api/server_api_service.dart';
 import '../models/user.dart';
-import 'favorites_controller.dart';
 
 class AuthController extends GetxController {
-  final AuthService _authService = AuthService();
-
-  final RxString token = ''.obs;
   final Rxn<User> user = Rxn<User>();
+  final RxString token = ''.obs;
+  final RxBool isLoading = false.obs;
 
-  bool get isLoggedIn => token.value.isNotEmpty;
+  bool get isLoggedIn => token.value.isNotEmpty && user.value != null;
 
   @override
   void onInit() {
     super.onInit();
-    LocalDemoService.instance.ensureSeeded();
-  }
-
-  FavoritesController? _favoritesOrNull() {
-    try {
-      return Get.find<FavoritesController>();
-    } catch (_) {
-      return null;
-    }
+    loadToken();
   }
 
   Future<void> loadToken() async {
-    await LocalDemoService.instance.ensureSeeded();
-
-    final SharedPreferences prefs = await SharedPreferences.getInstance();
     final String? savedToken = await AuthStorage.getToken();
+    final Map<String, dynamic>? savedUser = await AuthStorage.getUser();
 
-    token.value = savedToken ?? prefs.getString('token') ?? '';
+    if (savedToken != null && savedToken.isNotEmpty) {
+      token.value = savedToken;
+    }
+
+    if (savedUser != null) {
+      user.value = User.fromJson(savedUser);
+    }
 
     if (token.value.isNotEmpty) {
-      await AuthStorage.saveToken(token.value);
-      await getProfile();
-      await _favoritesOrNull()?.loadFavorites();
-    } else {
-      _favoritesOrNull()?.clearLocalState();
+      try {
+        await getProfile();
+      } catch (_) {}
     }
-  }
-
-  Future<void> _saveToken(String value) async {
-    await AuthStorage.saveToken(value);
-    token.value = value;
-  }
-
-  Future<void> _clearTokenSilently() async {
-    await AuthStorage.clear();
-    token.value = '';
-    user.value = null;
-    _favoritesOrNull()?.clearLocalState();
-  }
-
-  void _safeSnackbar(String title, String message) {
-    Future.delayed(Duration.zero, () {
-      if (Get.context != null) {
-        Get.snackbar(
-          title,
-          message,
-          snackPosition: SnackPosition.BOTTOM,
-        );
-      }
-    });
   }
 
   Future<bool> login(String email, String password) async {
     try {
-      final Map<String, dynamic>? result = await _authService.login(
-        email,
-        password,
+      isLoading.value = true;
+
+      final Map<String, dynamic> data = await ServerApiService.login(
+        email: email,
+        password: password,
       );
 
-      if (result != null && result['token'] != null) {
-        await _saveToken(result['token'].toString());
-        await getProfile();
-        await _favoritesOrNull()?.loadFavorites();
+      token.value = data['token']?.toString() ?? '';
 
-        return true;
-      }
-
-      _safeSnackbar(
-        'Ошибка входа',
-        result?['message']?.toString() ?? 'Неизвестная ошибка',
+      user.value = User.fromJson(
+        Map<String, dynamic>.from(data['user'] as Map),
       );
 
-      return false;
+      await AuthStorage.saveAuth(
+        token: token.value,
+        user: user.value!.toJson(),
+      );
+
+      await getProfile();
+
+      return true;
     } catch (e) {
-      _safeSnackbar(
+      Get.snackbar(
         'Ошибка',
-        e.toString(),
+        e.toString().replaceAll('Exception: ', ''),
       );
-
       return false;
+    } finally {
+      isLoading.value = false;
     }
   }
 
   Future<bool> register(String name, String email, String password) async {
     try {
-      final Map<String, dynamic>? result = await _authService.register(
-        name,
-        email,
-        password,
+      isLoading.value = true;
+
+      final Map<String, dynamic> data = await ServerApiService.register(
+        name: name,
+        email: email,
+        password: password,
       );
 
-      if (result != null && result['token'] != null) {
-        await _saveToken(result['token'].toString());
-        await getProfile();
-        await _favoritesOrNull()?.loadFavorites();
+      token.value = data['token']?.toString() ?? '';
 
-        return true;
-      }
-
-      _safeSnackbar(
-        'Ошибка регистрации',
-        result?['message']?.toString() ?? 'Неизвестная ошибка',
+      user.value = User.fromJson(
+        Map<String, dynamic>.from(data['user'] as Map),
       );
 
-      return false;
+      await AuthStorage.saveAuth(
+        token: token.value,
+        user: user.value!.toJson(),
+      );
+
+      await getProfile();
+
+      return true;
     } catch (e) {
-      _safeSnackbar(
+      Get.snackbar(
         'Ошибка',
-        e.toString(),
+        e.toString().replaceAll('Exception: ', ''),
       );
-
       return false;
+    } finally {
+      isLoading.value = false;
     }
-  }
-
-  Future<void> logout() async {
-    await AuthStorage.clear();
-
-    token.value = '';
-    user.value = null;
-    _favoritesOrNull()?.clearLocalState();
-
-    _safeSnackbar(
-      'Выход',
-      'Вы успешно вышли',
-    );
   }
 
   Future<User?> getProfile() async {
     if (token.value.isEmpty) {
-      return null;
+      return user.value;
     }
 
+    final Map<String, dynamic> data = await ServerApiService.getProfile();
+
+    final String oldAddress = user.value?.address ?? '';
+
+    user.value = User.fromJson({
+      ...data,
+      'address': data['address'] ?? oldAddress,
+    });
+
+    await AuthStorage.saveUser(user.value!.toJson());
+
+    return user.value;
+  }
+
+  Future<User?> updateProfile(
+      User? updatedUser, {
+        String? name,
+        String? email,
+        String? phone,
+        String? address,
+      }) async {
     try {
-      final Map<String, dynamic>? data = await _authService.getProfile(
-        token.value,
+      isLoading.value = true;
+
+      final User? current = user.value;
+
+      if (current == null) {
+        throw Exception('Пользователь не найден');
+      }
+
+      final String newName = updatedUser?.name ?? name ?? current.name;
+      final String newEmail = updatedUser?.email ?? email ?? current.email;
+      final String newPhone = updatedUser?.phone ?? phone ?? current.phone;
+      final String newAddress =
+          updatedUser?.address ?? address ?? current.address;
+
+      final Map<String, dynamic> data = await ServerApiService.updateProfile(
+        name: newName,
+        email: newEmail,
+        phone: newPhone,
       );
 
-      if (data == null) {
-        return null;
-      }
+      user.value = current.copyWith(
+        name: data['name']?.toString() ?? newName,
+        email: data['email']?.toString() ?? newEmail,
+        phone: data['phone']?.toString() ?? newPhone,
+        address: newAddress,
+      );
 
-      if (data['authError'] == true) {
-        await _clearTokenSilently();
+      await AuthStorage.saveUser(user.value!.toJson());
 
-        _safeSnackbar(
-          'Сессия истекла',
-          data['message']?.toString() ?? 'Войдите снова',
-        );
-
-        return null;
-      }
-
-      if (data['id'] != null) {
-        user.value = User.fromJson(data);
-
-        return user.value;
-      }
-
+      return user.value;
+    } catch (e) {
+      Get.snackbar(
+        'Ошибка',
+        e.toString().replaceAll('Exception: ', ''),
+      );
       return null;
-    } catch (_) {
-      return null;
+    } finally {
+      isLoading.value = false;
     }
   }
 
-  Future<User?> updateProfile(User updatedUser) async {
-    if (token.value.isEmpty) {
-      return null;
-    }
+  Future<void> logout() async {
+    await ServerApiService.logout();
 
-    try {
-      final Map<String, dynamic>? data = await _authService.updateProfile(
-        token.value,
-        updatedUser,
-      );
-
-      if (data == null) {
-        return null;
-      }
-
-      if (data['authError'] == true) {
-        await _clearTokenSilently();
-
-        _safeSnackbar(
-          'Сессия истекла',
-          data['message']?.toString() ?? 'Войдите снова',
-        );
-
-        return null;
-      }
-
-      if (data['id'] != null) {
-        user.value = User.fromJson(data);
-
-        return user.value;
-      }
-
-      return null;
-    } catch (_) {
-      return null;
-    }
-  }
-
-  void updateLoyaltyPoints(int delta) {
-    final User? currentUser = user.value;
-
-    if (currentUser != null) {
-      final int newPoints = (currentUser.loyaltyPoints + delta).clamp(
-        0,
-        1 << 30,
-      );
-
-      user.value = currentUser.copyWith(
-        loyaltyPoints: newPoints,
-      );
-    }
+    token.value = '';
+    user.value = null;
   }
 }

@@ -1,4 +1,5 @@
 import 'dart:convert';
+
 import 'package:http/http.dart' as http;
 
 import '../config/app_config.dart';
@@ -8,7 +9,7 @@ class ServerApiService {
   static String get baseUrl => AppConfig.baseUrl;
 
   static Future<Map<String, String>> _headers({bool auth = false}) async {
-    final Map<String, String> headers = <String, String>{
+    final Map<String, String> headers = {
       'Content-Type': 'application/json',
     };
 
@@ -23,38 +24,22 @@ class ServerApiService {
     return headers;
   }
 
-  static Future<List<Map<String, dynamic>>> getProducts() async {
-    final http.Response response = await http.get(
-      Uri.parse('$baseUrl/products'),
-      headers: await _headers(),
-    );
+  static Map<String, dynamic> _decodeMap(http.Response response) {
+    final dynamic data = jsonDecode(response.body);
 
-    if (response.statusCode == 200) {
-      final List<dynamic> data = jsonDecode(response.body) as List<dynamic>;
-
-      return data
-          .map((dynamic item) => Map<String, dynamic>.from(item as Map))
-          .toList();
+    if (data is Map<String, dynamic>) {
+      return data;
     }
 
-    throw Exception('Ошибка загрузки товаров: ${response.body}');
+    return Map<String, dynamic>.from(data as Map);
   }
 
-  static Future<List<Map<String, dynamic>>> getPopularProducts() async {
-    final http.Response response = await http.get(
-      Uri.parse('$baseUrl/products/popular'),
-      headers: await _headers(),
-    );
+  static List<Map<String, dynamic>> _decodeList(http.Response response) {
+    final List<dynamic> data = jsonDecode(response.body) as List<dynamic>;
 
-    if (response.statusCode == 200) {
-      final List<dynamic> data = jsonDecode(response.body) as List<dynamic>;
-
-      return data
-          .map((dynamic item) => Map<String, dynamic>.from(item as Map))
-          .toList();
-    }
-
-    throw Exception('Ошибка загрузки популярных товаров: ${response.body}');
+    return data
+        .map((dynamic item) => Map<String, dynamic>.from(item as Map))
+        .toList();
   }
 
   static Future<Map<String, dynamic>> login({
@@ -64,14 +49,13 @@ class ServerApiService {
     final http.Response response = await http.post(
       Uri.parse('$baseUrl/login'),
       headers: await _headers(),
-      body: jsonEncode(<String, dynamic>{
+      body: jsonEncode({
         'email': email,
         'password': password,
       }),
     );
 
-    final Map<String, dynamic> data =
-    jsonDecode(response.body) as Map<String, dynamic>;
+    final Map<String, dynamic> data = _decodeMap(response);
 
     if (response.statusCode == 200) {
       await AuthStorage.saveAuth(
@@ -93,15 +77,14 @@ class ServerApiService {
     final http.Response response = await http.post(
       Uri.parse('$baseUrl/register'),
       headers: await _headers(),
-      body: jsonEncode(<String, dynamic>{
+      body: jsonEncode({
         'name': name,
         'email': email,
         'password': password,
       }),
     );
 
-    final Map<String, dynamic> data =
-    jsonDecode(response.body) as Map<String, dynamic>;
+    final Map<String, dynamic> data = _decodeMap(response);
 
     if (response.statusCode == 200) {
       await AuthStorage.saveAuth(
@@ -121,14 +104,38 @@ class ServerApiService {
       headers: await _headers(auth: true),
     );
 
-    final Map<String, dynamic> data =
-    jsonDecode(response.body) as Map<String, dynamic>;
+    final Map<String, dynamic> data = _decodeMap(response);
 
     if (response.statusCode == 200) {
       return data;
     }
 
     throw Exception(data['message'] ?? 'Ошибка получения профиля');
+  }
+
+  static Future<Map<String, dynamic>> updateProfile({
+    required String name,
+    required String email,
+    required String phone,
+  }) async {
+    final http.Response response = await http.put(
+      Uri.parse('$baseUrl/profile'),
+      headers: await _headers(auth: true),
+      body: jsonEncode({
+        'name': name,
+        'email': email,
+        'phone': phone,
+      }),
+    );
+
+    final Map<String, dynamic> data = _decodeMap(response);
+
+    if (response.statusCode == 200) {
+      await AuthStorage.saveUser(data);
+      return data;
+    }
+
+    throw Exception(data['message'] ?? 'Ошибка при обновлении профиля');
   }
 
   static Future<void> logout() async {
@@ -142,6 +149,32 @@ class ServerApiService {
     }
   }
 
+  static Future<List<Map<String, dynamic>>> getProducts() async {
+    final http.Response response = await http.get(
+      Uri.parse('$baseUrl/products'),
+      headers: await _headers(),
+    );
+
+    if (response.statusCode == 200) {
+      return _decodeList(response);
+    }
+
+    throw Exception('Ошибка загрузки товаров: ${response.body}');
+  }
+
+  static Future<List<Map<String, dynamic>>> getPopularProducts() async {
+    final http.Response response = await http.get(
+      Uri.parse('$baseUrl/products/popular'),
+      headers: await _headers(),
+    );
+
+    if (response.statusCode == 200) {
+      return _decodeList(response);
+    }
+
+    throw Exception('Ошибка загрузки популярных товаров: ${response.body}');
+  }
+
   static Future<List<Map<String, dynamic>>> getCart() async {
     final http.Response response = await http.get(
       Uri.parse('$baseUrl/cart'),
@@ -149,11 +182,7 @@ class ServerApiService {
     );
 
     if (response.statusCode == 200) {
-      final List<dynamic> data = jsonDecode(response.body) as List<dynamic>;
-
-      return data
-          .map((dynamic item) => Map<String, dynamic>.from(item as Map))
-          .toList();
+      return _decodeList(response);
     }
 
     throw Exception('Ошибка загрузки корзины: ${response.body}');
@@ -163,7 +192,7 @@ class ServerApiService {
     final http.Response response = await http.post(
       Uri.parse('$baseUrl/cart'),
       headers: await _headers(auth: true),
-      body: jsonEncode(<String, dynamic>{
+      body: jsonEncode({
         'product_id': productId,
         'quantity': quantity,
       }),
@@ -178,7 +207,7 @@ class ServerApiService {
     final http.Response response = await http.put(
       Uri.parse('$baseUrl/cart/$productId'),
       headers: await _headers(auth: true),
-      body: jsonEncode(<String, dynamic>{
+      body: jsonEncode({
         'quantity': quantity,
       }),
     );
@@ -261,31 +290,89 @@ class ServerApiService {
     }
   }
 
+  static Future<List<Map<String, dynamic>>> getAddresses() async {
+    final http.Response response = await http.get(
+      Uri.parse('$baseUrl/addresses'),
+      headers: await _headers(auth: true),
+    );
+
+    if (response.statusCode == 200) {
+      return _decodeList(response);
+    }
+
+    throw Exception('Ошибка загрузки адресов: ${response.body}');
+  }
+
+  static Future<Map<String, dynamic>> createAddress(
+      Map<String, dynamic> body,
+      ) async {
+    final http.Response response = await http.post(
+      Uri.parse('$baseUrl/addresses'),
+      headers: await _headers(auth: true),
+      body: jsonEncode(body),
+    );
+
+    final Map<String, dynamic> data = _decodeMap(response);
+
+    if (response.statusCode == 200) {
+      return data;
+    }
+
+    throw Exception(data['message'] ?? 'Ошибка создания адреса');
+  }
+
+  static Future<Map<String, dynamic>> updateAddress(
+      int id,
+      Map<String, dynamic> body,
+      ) async {
+    final http.Response response = await http.put(
+      Uri.parse('$baseUrl/addresses/$id'),
+      headers: await _headers(auth: true),
+      body: jsonEncode(body),
+    );
+
+    final Map<String, dynamic> data = _decodeMap(response);
+
+    if (response.statusCode == 200) {
+      return data;
+    }
+
+    throw Exception(data['message'] ?? 'Ошибка обновления адреса');
+  }
+
+  static Future<void> deleteAddress(int id) async {
+    final http.Response response = await http.delete(
+      Uri.parse('$baseUrl/addresses/$id'),
+      headers: await _headers(auth: true),
+    );
+
+    if (response.statusCode != 200) {
+      final Map<String, dynamic> data = _decodeMap(response);
+      throw Exception(data['message'] ?? 'Ошибка удаления адреса');
+    }
+  }
+
   static Future<Map<String, dynamic>> createOrder({
     required List<Map<String, dynamic>> itemsMaps,
     required Map<String, dynamic> checkoutData,
   }) async {
     final List<Map<String, dynamic>> items = itemsMaps.map((item) {
-      final dynamic productId = item['product_id'] ?? item['productId'] ?? item['id'];
-      final dynamic quantity = item['quantity'];
-
-      return <String, dynamic>{
-        'product_id': productId,
-        'quantity': quantity,
+      return {
+        'product_id': item['product_id'] ?? item['productId'] ?? item['id'],
+        'quantity': item['quantity'],
       };
     }).toList();
 
-    final response = await http.post(
+    final http.Response response = await http.post(
       Uri.parse('$baseUrl/orders'),
       headers: await _headers(auth: true),
-      body: jsonEncode(<String, dynamic>{
+      body: jsonEncode({
         'items': items,
         'checkout': checkoutData,
       }),
     );
 
-    final Map<String, dynamic> data =
-    jsonDecode(response.body) as Map<String, dynamic>;
+    final Map<String, dynamic> data = _decodeMap(response);
 
     if (response.statusCode == 200) {
       return data;
@@ -295,27 +382,38 @@ class ServerApiService {
   }
 
   static Future<List<Map<String, dynamic>>> getOrders() async {
-    final response = await http.get(
+    final http.Response response = await http.get(
       Uri.parse('$baseUrl/orders'),
       headers: await _headers(auth: true),
     );
 
     if (response.statusCode == 200) {
-      final List<dynamic> data = jsonDecode(response.body) as List<dynamic>;
-
-      return data
-          .map((dynamic item) => Map<String, dynamic>.from(item as Map))
-          .toList();
+      return _decodeList(response);
     }
 
     throw Exception('Ошибка загрузки заказов: ${response.body}');
   }
 
+  static Future<Map<String, dynamic>> getOrderById(int orderId) async {
+    final http.Response response = await http.get(
+      Uri.parse('$baseUrl/orders/$orderId'),
+      headers: await _headers(auth: true),
+    );
+
+    final Map<String, dynamic> data = _decodeMap(response);
+
+    if (response.statusCode == 200) {
+      return data;
+    }
+
+    throw Exception(data['message'] ?? 'Ошибка загрузки заказа');
+  }
+
   static Future<void> updateOrderStatus(int orderId, String status) async {
-    final response = await http.put(
+    final http.Response response = await http.put(
       Uri.parse('$baseUrl/orders/$orderId/status'),
       headers: await _headers(auth: true),
-      body: jsonEncode(<String, dynamic>{
+      body: jsonEncode({
         'status': status,
       }),
     );
