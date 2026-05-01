@@ -768,8 +768,16 @@ app.post("/orders", authenticateToken, async (req, res) => {
     return res.status(400).json({ message: "Нет товаров для заказа" });
   }
 
-  if (!checkout) {
-    return res.status(400).json({ message: "Нет данных оформления заказа" });
+  function resolveLevelName(totalSpent) {
+    if (totalSpent >= 15000) {
+      return "Gold";
+    }
+
+    if (totalSpent >= 5000) {
+      return "Silver";
+    }
+
+    return "Bronze";
   }
 
   try {
@@ -778,159 +786,288 @@ app.post("/orders", authenticateToken, async (req, res) => {
     let itemsTotal = 0;
 
     for (const item of items) {
-      const productId = Number(item.product_id || item.productId);
-      const quantity = Number(item.quantity);
-
-      if (!productId || !quantity || quantity <= 0) {
-        throw new Error("Некорректный товар в заказе");
-      }
-
       const productRes = await pool.query(
-        "SELECT id, price FROM products WHERE id = $1",
-        [productId]
+        "SELECT price FROM products WHERE id = $1",
+        [item.product_id]
       );
 
       if (productRes.rows.length === 0) {
-        throw new Error(`Товар ${productId} не найден`);
+        throw new Error(`Продукт ${item.product_id} не найден`);
       }
 
-      itemsTotal += Number(productRes.rows[0].price) * quantity;
+      itemsTotal += Number(productRes.rows[0].price) * Number(item.quantity);
     }
 
+    const checkoutData = checkout || {};
+
     const deliveryPrice = Number(
-      checkout.delivery_price ??
-        checkout.deliveryPrice ??
-        checkout.delivery_cost ??
-        checkout.deliveryCost ??
+      checkoutData.delivery_price || checkoutData.deliveryPrice || 0
+    );
+
+    const requestedBonuses = Number(
+      checkoutData.applied_bonuses ||
+        checkoutData.appliedBonuses ||
+        checkoutData.bonus_applied ||
+        checkoutData.bonusApplied ||
         0
     );
 
-    const bonusApplied = Number(
-      checkout.applied_bonuses ??
-        checkout.appliedBonuses ??
-        checkout.bonus_applied ??
-        0
+    let loyaltyAccountResult = await pool.query(
+      `SELECT id, points, total_spent, level_id
+       FROM loyalty_accounts
+       WHERE user_id = $1
+       FOR UPDATE`,
+      [userId]
     );
 
-    const total = Math.max(itemsTotal + deliveryPrice - bonusApplied, 0);
+    let loyaltyAccount = loyaltyAccountResult.rows[0];
 
-    const orderStatus = "Заказ оформлен";
+    if (!loyaltyAccount) {
+      const bronzeLevelResult = await pool.query(
+        "SELECT id FROM loyalty_levels WHERE name = $1 LIMIT 1",
+        ["Bronze"]
+      );
+
+      if (bronzeLevelResult.rows.length === 0) {
+        throw new Error("Уровень Bronze не найден в loyalty_levels");
+      }
+
+      const createdAccountResult = await pool.query(
+        `INSERT INTO loyalty_accounts (user_id, points, total_spent, level_id)
+         VALUES ($1, 0, 0, $2)
+         RETURNING id, points, total_spent, level_id`,
+        [userId, bronzeLevelResult.rows[0].id]
+      );
+
+      loyaltyAccount = createdAccountResult.rows[0];
+    }
+
+    const levelResult = await pool.query(
+      `SELECT name, multiplier
+       FROM loyalty_levels
+       WHERE id = $1
+       LIMIT 1`,
+      [loyaltyAccount.level_id]
+    );
+
+    const currentLevel = levelResult.rows[0] || {
+      name: "Bronze",
+      multiplier: 0.05,
+    };
+
+    const currentPoints = Number(loyaltyAccount.points || 0);
+    const maxBonusByPercent = Math.floor(itemsTotal * 0.3);
+
+    const bonusApplied = Math.max(
+      0,
+      Math.min(
+        requestedBonuses,
+        currentPoints,
+        maxBonusByPercent,
+        Math.floor(itemsTotal)
+      )
+    );
+
+    const paidForProducts = Math.max(0, itemsTotal - bonusApplied);
+    const currentMultiplier = Number(currentLevel.multiplier || 0.05);
+    const bonusEarned = Math.floor(paidForProducts * currentMultiplier);
+    const total = paidForProducts + deliveryPrice;
+
+    const newTotalSpent =
+      Number(loyaltyAccount.total_spent || 0) + paidForProducts;
+
+    const newLevelName = resolveLevelName(newTotalSpent);
+
+    const newLevelResult = await pool.query(
+      "SELECT id FROM loyalty_levels WHERE name = $1 LIMIT 1",
+      [newLevelName]
+    );
+
+    const newLevelId =
+      newLevelResult.rows.length > 0
+        ? newLevelResult.rows[0].id
+        : loyaltyAccount.level_id;
 
     const orderRes = await pool.query(
-      `INSERT INTO orders (user_id, total, status)
-       VALUES ($1, $2, $3)
-       RETURNING *`,
-      [userId, total, orderStatus]
+      `INSERT INTO orders (
+        user_id,
+        total,
+        status,
+        items_total,
+        delivery_cost,
+        bonus_applied,
+        bonus_earned
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      RETURNING *`,
+      [
+        userId,
+        total,
+        "Заказ собирается",
+        itemsTotal,
+        deliveryPrice,
+        bonusApplied,
+        bonusEarned,
+      ]
     );
 
     const orderId = orderRes.rows[0].id;
 
     for (const item of items) {
-      const productId = Number(item.product_id || item.productId);
-      const quantity = Number(item.quantity);
-
       await pool.query(
         `INSERT INTO order_items (order_id, product_id, quantity, price)
          VALUES ($1, $2, $3, (SELECT price FROM products WHERE id = $2))`,
-        [orderId, productId, quantity]
+        [orderId, item.product_id, item.quantity]
       );
     }
 
-    const addressId =
-      checkout.address_id || checkout.addressId
-        ? Number(checkout.address_id || checkout.addressId)
-        : null;
+    if (bonusApplied > 0) {
+      await pool.query(
+        `INSERT INTO loyalty_transactions (
+          loyalty_account_id,
+          type,
+          points,
+          description
+        )
+        VALUES ($1, $2, $3, $4)`,
+        [
+          loyaltyAccount.id,
+          "spend",
+          -bonusApplied,
+          `Списание бонусов за заказ №${orderId}`,
+        ]
+      );
+    }
 
-    const recipientName =
-      checkout.recipient_name || checkout.recipientName || null;
+    if (bonusEarned > 0) {
+      await pool.query(
+        `INSERT INTO loyalty_transactions (
+          loyalty_account_id,
+          type,
+          points,
+          description
+        )
+        VALUES ($1, $2, $3, $4)`,
+        [
+          loyaltyAccount.id,
+          "earn",
+          bonusEarned,
+          `Начисление бонусов за заказ №${orderId}`,
+        ]
+      );
+    }
 
-    const phone = checkout.phone || null;
+    await pool.query(
+      `UPDATE loyalty_accounts
+       SET
+        points = points - $1 + $2,
+        total_spent = $3,
+        level_id = $4,
+        updated_at = NOW()
+       WHERE id = $5`,
+      [bonusApplied, bonusEarned, newTotalSpent, newLevelId, loyaltyAccount.id]
+    );
 
     const fullAddress =
-      checkout.full_address ||
-      checkout.fullAddress ||
-      checkout.delivery_address ||
-      checkout.deliveryAddress ||
+      checkoutData.full_address ||
+      checkoutData.fullAddress ||
+      checkoutData.address ||
       "Адрес не указан";
 
+    const recipientName =
+      checkoutData.recipient_name ||
+      checkoutData.recipientName ||
+      checkoutData.name ||
+      null;
+
+    const phone = checkoutData.phone || null;
+
     const deliveryMethod =
-      checkout.delivery_method || checkout.deliveryMethod || "delivery";
-
-    const deliveryDate = checkout.delivery_date || checkout.deliveryDate || null;
-
-    const deliveryTimeFrom =
-      checkout.delivery_time_from || checkout.deliveryTimeFrom || null;
-
-    const deliveryTimeTo =
-      checkout.delivery_time_to || checkout.deliveryTimeTo || null;
-
-    const comment =
-      checkout.comment ||
-      checkout.recipient_comment ||
-      checkout.recipientComment ||
+      checkoutData.delivery_method ||
+      checkoutData.deliveryMethod ||
+      checkoutData.delivery ||
       null;
 
     const paymentMethod =
-      checkout.payment_method || checkout.paymentMethod || "cash";
+      checkoutData.payment_method ||
+      checkoutData.paymentMethod ||
+      checkoutData.payment ||
+      "cash";
 
-    const paymentStatus =
-      checkout.payment_status || checkout.paymentStatus || "pending";
-
-    const isPaid =
-      paymentStatus === "paid" ||
-      paymentStatus === "Оплачено картой" ||
-      paymentStatus === "Оплачено через СБП";
+    const paymentStatus = paymentMethod === "cash" ? "pending" : "paid";
+    const transactionStatus = paymentMethod === "cash" ? "pending" : "paid";
 
     await pool.query(
-      `INSERT INTO order_delivery_details
-       (order_id, address_id, recipient_name, phone, full_address, delivery_method, delivery_date, delivery_time_from, delivery_time_to, comment, delivery_price)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+      `INSERT INTO order_delivery_details (
+        order_id,
+        address_id,
+        recipient_name,
+        phone,
+        full_address,
+        delivery_method,
+        delivery_date,
+        delivery_time_from,
+        delivery_time_to,
+        comment,
+        delivery_price
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
       [
         orderId,
-        addressId,
+        checkoutData.address_id || checkoutData.addressId || null,
         recipientName,
         phone,
         fullAddress,
         deliveryMethod,
-        deliveryDate,
-        deliveryTimeFrom,
-        deliveryTimeTo,
-        comment,
+        checkoutData.delivery_date || checkoutData.deliveryDate || null,
+        checkoutData.delivery_time_from ||
+          checkoutData.deliveryTimeFrom ||
+          null,
+        checkoutData.delivery_time_to || checkoutData.deliveryTimeTo || null,
+        checkoutData.comment ||
+          checkoutData.recipient_comment ||
+          checkoutData.recipientComment ||
+          null,
         deliveryPrice,
       ]
     );
 
     await pool.query(
-      `INSERT INTO order_payment_details
-       (order_id, payment_method, payment_status, payment_amount)
-       VALUES ($1,$2,$3,$4)`,
+      `INSERT INTO order_payment_details (
+        order_id,
+        payment_method,
+        payment_status,
+        payment_amount
+      )
+      VALUES ($1, $2, $3, $4)`,
       [orderId, paymentMethod, paymentStatus, total]
     );
 
     await pool.query(
-      `INSERT INTO payment_transactions
-       (order_id, user_id, payment_method_id, payment_type, amount, status, provider, provider_transaction_id, paid_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+      `INSERT INTO payment_transactions (
+        order_id,
+        user_id,
+        payment_type,
+        amount,
+        status,
+        provider,
+        paid_at
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7)`,
       [
         orderId,
         userId,
-        checkout.payment_method_id || checkout.paymentMethodId
-          ? Number(checkout.payment_method_id || checkout.paymentMethodId)
-          : null,
         paymentMethod,
         total,
-        paymentStatus,
-        checkout.provider || "demo",
-        checkout.provider_transaction_id ||
-          checkout.providerTransactionId ||
-          null,
-        isPaid ? new Date() : null,
+        transactionStatus,
+        "demo",
+        transactionStatus === "paid" ? new Date() : null,
       ]
     );
 
     await pool.query(
       "INSERT INTO order_history (order_id, status) VALUES ($1, $2)",
-      [orderId, orderStatus]
+      [orderId, "Заказ собирается"]
     );
 
     const cartResult = await pool.query(
@@ -946,42 +1083,47 @@ app.post("/orders", authenticateToken, async (req, res) => {
 
     await pool.query("COMMIT");
 
-    const order = await pool.query(
-      `SELECT o.*,
-              COALESCE(
-                (
-                  SELECT json_agg(
-                    json_build_object(
-                      'id', oi.id,
-                      'order_id', oi.order_id,
-                      'product_id', oi.product_id,
-                      'quantity', oi.quantity,
-                      'price', oi.price,
-                      'name', p.name,
-                      'image_url', p.image_url
-                    )
-                    ORDER BY oi.id
-                  )
-                  FROM order_items oi
-                  LEFT JOIN products p ON p.id = oi.product_id
-                  WHERE oi.order_id = o.id
-                ),
-                '[]'::json
-              ) AS items,
-              row_to_json(odd.*) AS delivery,
-              row_to_json(opd.*) AS payment,
-              odd.full_address AS delivery_address,
-              odd.delivery_price AS delivery_cost,
-              opd.payment_method AS payment_method,
-              opd.payment_status AS payment_status
+    const newOrder = await pool.query(
+      `SELECT
+        o.*,
+        odd.delivery_price AS delivery_cost,
+        opd.payment_method,
+        opd.payment_status,
+        odd.full_address AS delivery_address,
+        (
+          SELECT json_agg(
+            json_build_object(
+              'product_id', oi.product_id,
+              'quantity', oi.quantity,
+              'price', oi.price,
+              'name', p.name,
+              'image_url', p.image_url
+            )
+          )
+          FROM order_items oi
+          LEFT JOIN products p ON p.id = oi.product_id
+          WHERE oi.order_id = o.id
+        ) AS items,
+        (
+          SELECT row_to_json(d)
+          FROM order_delivery_details d
+          WHERE d.order_id = o.id
+          LIMIT 1
+        ) AS delivery,
+        (
+          SELECT row_to_json(p)
+          FROM order_payment_details p
+          WHERE p.order_id = o.id
+          LIMIT 1
+        ) AS payment
        FROM orders o
        LEFT JOIN order_delivery_details odd ON odd.order_id = o.id
        LEFT JOIN order_payment_details opd ON opd.order_id = o.id
-       WHERE o.id = $1 AND o.user_id = $2`,
-      [orderId, userId]
+       WHERE o.id = $1`,
+      [orderId]
     );
 
-    res.json(order.rows[0]);
+    res.json(newOrder.rows[0]);
   } catch (err) {
     await pool.query("ROLLBACK");
 
@@ -998,34 +1140,25 @@ app.get("/orders", authenticateToken, async (req, res) => {
   const userId = req.user.id;
 
   try {
-    const result = await pool.query(
-      `SELECT o.*,
-              COALESCE(
-                (
-                  SELECT json_agg(
-                    json_build_object(
-                      'id', oi.id,
-                      'order_id', oi.order_id,
-                      'product_id', oi.product_id,
-                      'quantity', oi.quantity,
-                      'price', oi.price,
-                      'name', p.name,
-                      'image_url', p.image_url
-                    )
-                    ORDER BY oi.id
-                  )
-                  FROM order_items oi
-                  LEFT JOIN products p ON p.id = oi.product_id
-                  WHERE oi.order_id = o.id
-                ),
-                '[]'::json
-              ) AS items,
-              row_to_json(odd.*) AS delivery,
-              row_to_json(opd.*) AS payment,
-              odd.full_address AS delivery_address,
-              odd.delivery_price AS delivery_cost,
-              opd.payment_method AS payment_method,
-              opd.payment_status AS payment_status
+    const ordersRes = await pool.query(
+      `SELECT
+        o.*,
+        odd.delivery_price AS delivery_cost,
+        odd.full_address AS delivery_address,
+        opd.payment_method,
+        opd.payment_status,
+        (
+          SELECT row_to_json(d)
+          FROM order_delivery_details d
+          WHERE d.order_id = o.id
+          LIMIT 1
+        ) AS delivery,
+        (
+          SELECT row_to_json(p)
+          FROM order_payment_details p
+          WHERE p.order_id = o.id
+          LIMIT 1
+        ) AS payment
        FROM orders o
        LEFT JOIN order_delivery_details odd ON odd.order_id = o.id
        LEFT JOIN order_payment_details opd ON opd.order_id = o.id
@@ -1034,7 +1167,27 @@ app.get("/orders", authenticateToken, async (req, res) => {
       [userId]
     );
 
-    res.json(result.rows);
+    const orders = [];
+
+    for (const order of ordersRes.rows) {
+      const itemsRes = await pool.query(
+        `SELECT
+          oi.*,
+          p.name,
+          p.image_url
+         FROM order_items oi
+         JOIN products p ON p.id = oi.product_id
+         WHERE oi.order_id = $1`,
+        [order.id]
+      );
+
+      orders.push({
+        ...order,
+        items: itemsRes.rows,
+      });
+    }
+
+    res.json(orders);
   } catch (err) {
     console.error("Ошибка GET /orders:", err);
     res.status(500).json({ message: "Ошибка при получении заказов" });

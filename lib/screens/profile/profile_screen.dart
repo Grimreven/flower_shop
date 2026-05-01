@@ -13,6 +13,7 @@ import '../../models/payment_method_model.dart';
 import '../../models/user.dart';
 import '../../utils/app_colors.dart';
 import '../../utils/phone_input_formatter.dart';
+import '../../widgets/loyalty_card.dart';
 import 'profile_address_section.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -74,7 +75,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (profile != null) {
       editedUser = profile;
       savedUserSnapshot = profile;
-
       nameController.text = profile.name;
       emailController.text = profile.email;
       phoneController.text = profile.phone;
@@ -105,7 +105,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
 
     savedUserSnapshot = user;
-
     nameController.text = user.name;
     emailController.text = user.email;
     phoneController.text = user.phone;
@@ -124,7 +123,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
 
     editedUser = user;
-
     nameController.text = user.name;
     emailController.text = user.email;
     phoneController.text = user.phone;
@@ -164,11 +162,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (updated != null) {
       editedUser = updated;
       savedUserSnapshot = updated;
-
       nameController.text = updated.name;
       emailController.text = updated.email;
       phoneController.text = updated.phone;
-
       _showMessage('Профиль успешно обновлён');
     } else {
       _showMessage('Не удалось сохранить профиль');
@@ -295,7 +291,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _showAddCardDialog() async {
-    final PaymentCardFormResult? result = await showModalBottomSheet(
+    final PaymentCardFormResult? result =
+    await showModalBottomSheet<PaymentCardFormResult>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
@@ -328,7 +325,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _showEditCardDialog(PaymentMethodModel method) async {
-    final PaymentCardFormResult? result = await showModalBottomSheet(
+    final PaymentCardFormResult? result =
+    await showModalBottomSheet<PaymentCardFormResult>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
@@ -378,7 +376,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }) {
     final bool selected = activeSection == id;
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
-
     final Color inactiveColor =
     isDark ? AppColors.darkMutedForeground : AppColors.mutedForeground;
 
@@ -390,11 +387,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
           duration: const Duration(milliseconds: 220),
           padding: const EdgeInsets.symmetric(vertical: 12),
           decoration: BoxDecoration(
-            gradient: selected
-                ? (isDark
-                ? AppColors.darkBrandGradient
-                : AppColors.brandGradient)
-                : null,
+            gradient:
+            selected ? (isDark ? AppColors.darkBrandGradient : AppColors.brandGradient) : null,
             borderRadius: BorderRadius.circular(18),
             boxShadow: selected
                 ? [
@@ -655,19 +649,30 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final double totalSpent =
     spentFromOrders > user.totalSpent ? spentFromOrders : user.totalSpent;
 
-    String level = 'Bronze';
-    int nextLevel = 5000;
+    String level = user.loyaltyLevel;
+    String colorHex = user.loyaltyColor;
+    int nextLevelPoints = 5000;
+    String nextLevelLabel = 'Silver';
 
     if (totalSpent >= 15000) {
       level = 'Gold';
-      nextLevel = totalSpent.round();
+      colorHex = '#D4AF37';
+      nextLevelPoints = totalSpent.round();
+      nextLevelLabel = 'Gold';
     } else if (totalSpent >= 5000) {
       level = 'Silver';
-      nextLevel = 15000;
+      colorHex = '#C0C0C0';
+      nextLevelPoints = 15000;
+      nextLevelLabel = 'Gold';
+    } else {
+      level = 'Bronze';
+      colorHex = '#CD7F32';
+      nextLevelPoints = 5000;
+      nextLevelLabel = 'Silver';
     }
 
-    final int points = totalSpent.round();
-    final int remaining = (nextLevel - totalSpent).clamp(0, nextLevel).round();
+    final int points =
+    user.loyaltyPoints > 0 ? user.loyaltyPoints : totalSpent.round();
 
     return _card(
       child: Column(
@@ -681,63 +686,105 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ),
           const SizedBox(height: 16),
+          LoyaltyCard(
+            level: level,
+            points: points,
+            totalSpent: totalSpent,
+            nextLevelPoints: nextLevelPoints,
+            colorHex: colorHex,
+            nextLevelLabel: nextLevelLabel,
+          ),
+          const SizedBox(height: 16),
+          _loyaltyInfoTile(
+            title: 'Bronze',
+            subtitle: 'от 0 ₽ покупок',
+            color: const Color(0xFFCD7F32),
+            isActive: level.toLowerCase() == 'bronze',
+          ),
+          _loyaltyInfoTile(
+            title: 'Silver',
+            subtitle: 'от 5 000 ₽ покупок',
+            color: const Color(0xFFC0C0C0),
+            isActive: level.toLowerCase() == 'silver',
+          ),
+          _loyaltyInfoTile(
+            title: 'Gold',
+            subtitle: 'от 15 000 ₽ покупок',
+            color: const Color(0xFFD4AF37),
+            isActive: level.toLowerCase() == 'gold',
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _loyaltyInfoTile({
+    required String title,
+    required String subtitle,
+    required Color color,
+    required bool isActive,
+  }) {
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: isActive
+            ? color.withValues(alpha: isDark ? 0.22 : 0.14)
+            : isDark
+            ? AppColors.darkSurfaceElevated
+            : AppColors.primaryLight,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: isActive
+              ? color
+              : isDark
+              ? AppColors.darkBorder
+              : Colors.transparent,
+        ),
+      ),
+      child: Row(
+        children: [
           Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(18),
+            width: 42,
+            height: 42,
             decoration: BoxDecoration(
-              gradient: Theme.of(context).brightness == Brightness.dark
-                  ? AppColors.darkBrandGradient
-                  : AppColors.brandGradient,
-              borderRadius: BorderRadius.circular(24),
-              boxShadow: [
-                BoxShadow(
-                  color: (Theme.of(context).brightness == Brightness.dark
-                      ? AppColors.purple
-                      : AppColors.primary)
-                      .withValues(alpha: 0.18),
-                  blurRadius: 18,
-                  offset: const Offset(0, 8),
-                ),
-              ],
+              color: color,
+              borderRadius: BorderRadius.circular(14),
             ),
+            child: const Icon(
+              Icons.workspace_premium_rounded,
+              color: Colors.white,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  level,
+                  title,
                   style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 26,
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w800,
                   ),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 4),
                 Text(
-                  '$points бонусов',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
+                  subtitle,
+                  style: TextStyle(
+                    color: isDark
+                        ? AppColors.darkMutedForeground
+                        : AppColors.mutedForeground,
                   ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Покупок на ${totalSpent.toStringAsFixed(0)} ₽',
-                  style: const TextStyle(color: Colors.white),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 16),
-          if (level != 'Gold')
-            Text(
-              'До следующего уровня осталось $remaining ₽',
-              style: const TextStyle(fontWeight: FontWeight.w600),
-            )
-          else
-            const Text(
-              'Максимальный уровень достигнут',
-              style: TextStyle(fontWeight: FontWeight.w600),
+          if (isActive)
+            const Icon(
+              Icons.check_circle_rounded,
+              color: Colors.green,
             ),
         ],
       ),
@@ -799,7 +846,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   Text(
                     'По умолчанию',
                     style: TextStyle(
-                      color: isDark ? AppColors.purpleLight : AppColors.primary,
+                      color:
+                      isDark ? AppColors.purpleLight : AppColors.primary,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
@@ -819,17 +867,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
             },
             itemBuilder: (BuildContext context) {
               return [
-                const PopupMenuItem(
+                const PopupMenuItem<String>(
                   value: 'default',
                   child: Text('Сделать основным'),
                 ),
                 if (method.isCard && !method.isSystem)
-                  const PopupMenuItem(
+                  const PopupMenuItem<String>(
                     value: 'edit',
                     child: Text('Изменить'),
                   ),
                 if (method.isCard && !method.isSystem)
-                  const PopupMenuItem(
+                  const PopupMenuItem<String>(
                     value: 'delete',
                     child: Text('Удалить'),
                   ),
@@ -950,7 +998,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   width: double.infinity,
                   child: DecoratedBox(
                     decoration: BoxDecoration(
-                      gradient: Theme.of(context).brightness == Brightness.dark
+                      gradient:
+                      Theme.of(context).brightness == Brightness.dark
                           ? AppColors.darkBrandGradient
                           : AppColors.brandGradient,
                       borderRadius: BorderRadius.circular(18),
@@ -1096,7 +1145,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               AnimatedSwitcher(
                 duration: const Duration(milliseconds: 240),
                 child: KeyedSubtree(
-                  key: ValueKey(activeSection),
+                  key: ValueKey<String>(activeSection),
                   child: _activeSection(),
                 ),
               ),
@@ -1292,8 +1341,9 @@ class _PaymentCardBottomSheetState extends State<_PaymentCardBottomSheet> {
                 width: double.infinity,
                 child: DecoratedBox(
                   decoration: BoxDecoration(
-                    gradient:
-                    isDark ? AppColors.darkBrandGradient : AppColors.brandGradient,
+                    gradient: isDark
+                        ? AppColors.darkBrandGradient
+                        : AppColors.brandGradient,
                     borderRadius: BorderRadius.circular(18),
                   ),
                   child: ElevatedButton(
