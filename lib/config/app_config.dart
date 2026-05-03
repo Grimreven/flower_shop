@@ -1,5 +1,5 @@
 class AppConfig {
-  static const bool useBackend = false;
+  static const bool useBackend = true;
 
-  static const String baseUrl = 'http://127.0.0.1:3000';
+  static const String baseUrl = "http://192.168.1.193:3000";
 }

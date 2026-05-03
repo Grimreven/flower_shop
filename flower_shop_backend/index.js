@@ -42,6 +42,32 @@ function authenticateToken(req, res, next) {
   }
 }
 
+async function requireAdmin(req, res, next) {
+  try {
+    const result = await pool.query(
+      `
+      SELECT r.name AS role_name
+      FROM customers c
+      LEFT JOIN roles r ON r.id = c.role_id
+      WHERE c.id = $1
+      LIMIT 1
+      `,
+      [req.user.id]
+    );
+
+    if (result.rows[0]?.role_name !== "admin") {
+      return res.status(403).json({
+        message: "Только для администратора",
+      });
+    }
+
+    next();
+  } catch (err) {
+    console.error("Ошибка проверки админа:", err);
+    res.status(500).json({ message: "Ошибка сервера" });
+  }
+}
+
 function toNumber(value, fallback = 0) {
   const result = Number(value);
   return Number.isFinite(result) ? result : fallback;
@@ -141,7 +167,12 @@ app.post("/login", async (req, res) => {
 
   try {
     const result = await pool.query(
-      "SELECT id, name, email, password_hash, phone FROM customers WHERE email = $1",
+      `
+      SELECT c.*, r.name as role_name
+      FROM customers c
+      LEFT JOIN roles r ON r.id = c.role_id
+      WHERE c.email = $1
+      `,
       [email]
     );
 
@@ -157,7 +188,11 @@ app.post("/login", async (req, res) => {
     }
 
     const token = jwt.sign(
-      { id: user.id, email: user.email },
+      {
+        id: user.id,
+        email: user.email,
+        role: user.role_name,
+      },
       process.env.JWT_SECRET || "mysecret",
       { expiresIn: "7d" }
     );
@@ -168,12 +203,13 @@ app.post("/login", async (req, res) => {
         name: user.name,
         email: user.email,
         phone: user.phone,
+        role: user.role_name,
       },
       token,
     });
   } catch (err) {
     console.error("Ошибка POST /login:", err);
-    res.status(500).json({ message: "Ошибка сервера", error: err.message });
+    res.status(500).json({ message: "Ошибка сервера" });
   }
 });
 
@@ -186,11 +222,13 @@ app.get("/profile", authenticateToken, async (req, res) => {
               c.name,
               c.email,
               c.phone,
+              r.name AS role,
               COALESCE(l.points, 0) AS loyalty_points,
               COALESCE(l.total_spent, 0) AS total_spent,
               COALESCE(levels.name, 'Bronze') AS loyalty_level,
               COALESCE(levels.color_hex, '#CD7F32') AS loyalty_color
        FROM customers c
+       LEFT JOIN roles r ON r.id = c.role_id
        LEFT JOIN loyalty_accounts l ON l.user_id = c.id
        LEFT JOIN loyalty_levels levels ON levels.id = l.level_id
        WHERE c.id = $1`,
@@ -303,6 +341,53 @@ app.get("/products/:id/price-history", async (req, res) => {
   } catch (err) {
     console.error("Ошибка GET /products/:id/price-history:", err);
     res.status(500).json({ message: "Ошибка сервера", error: err.message });
+  }
+});
+
+// 🔥 ADMIN: обновление товара
+app.put("/products/:id", authenticateToken, requireAdmin, async (req, res) => {
+  const productId = req.params.id;
+  const { name, description, price } = req.body;
+
+  try {
+    const productResult = await pool.query(
+      "SELECT * FROM products WHERE id = $1",
+      [productId]
+    );
+
+    if (productResult.rows.length === 0) {
+      return res.status(404).json({ message: "Товар не найден" });
+    }
+
+    const product = productResult.rows[0];
+
+    const newName = name ?? product.name;
+    const newDescription = description ?? product.description;
+    const newPrice = price ?? product.price;
+
+    // история цены
+    if (Number(newPrice) !== Number(product.price)) {
+      await pool.query(
+        `INSERT INTO product_price_history (product_id, price, changed_at)
+         VALUES ($1, $2, NOW())`,
+        [productId, newPrice]
+      );
+    }
+
+    const updated = await pool.query(
+      `UPDATE products
+       SET name = $1,
+           description = $2,
+           price = $3
+       WHERE id = $4
+       RETURNING *`,
+      [newName, newDescription, newPrice, productId]
+    );
+
+    res.json(updated.rows[0]);
+  } catch (err) {
+    console.error("Ошибка ADMIN PUT /products:", err);
+    res.status(500).json({ message: "Ошибка сервера" });
   }
 });
 

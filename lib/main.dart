@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:get_storage/get_storage.dart';
-
+import 'screens/admin/edit_product_screen.dart';
 import 'api/notification_service.dart';
 import 'bindings/app_bindings.dart';
 import 'controllers/auth_controller.dart';
@@ -245,6 +245,7 @@ class FlowerShopApp extends StatelessWidget {
             name: '/order_success',
             page: () => const OrderSuccessScreen(),
           ),
+          GetPage(name: '/admin', page: () => const EditProductScreen()),
         ],
       ),
     );
@@ -288,7 +289,17 @@ class _SplashScreenState extends State<SplashScreen>
     _controller.forward();
 
     Future.delayed(const Duration(seconds: 3), () {
-      Get.offNamed('/main');
+      final auth = Get.find<AuthController>();
+
+      if (auth.isLoggedIn) {
+        if (auth.isAdmin) {
+          Get.offAllNamed('/admin');
+        } else {
+          Get.offAllNamed('/main');
+        }
+      } else {
+        Get.offAllNamed('/main');
+      }
     });
   }
 

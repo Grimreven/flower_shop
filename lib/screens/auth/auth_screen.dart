@@ -74,15 +74,19 @@ class _AuthScreenState extends State<AuthScreen>
 
       if (success) {
         if (!mounted) return;
-        Get.offAll(() => const MainScreen());
+
+        // 🔥 ВОТ ГЛАВНОЕ
+        if (_authController.isAdmin) {
+          Get.offAllNamed('/admin');
+        } else {
+          Get.offAll(() => const MainScreen());
+        }
       } else {
-        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Ошибка входа')),
         );
       }
     } catch (e) {
-      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Ошибка: $e')),
       );

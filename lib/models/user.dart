@@ -8,6 +8,7 @@ class User {
   final double totalSpent;
   final String loyaltyLevel;
   final String loyaltyColor;
+  final String? role;
 
   const User({
     required this.id,
@@ -19,6 +20,8 @@ class User {
     this.totalSpent = 0,
     this.loyaltyLevel = 'Bronze',
     this.loyaltyColor = '#CD7F32',
+    this.role,
+
   });
 
   factory User.fromJson(Map<String, dynamic> json) {
@@ -28,6 +31,7 @@ class User {
       email: json['email']?.toString() ?? '',
       phone: json['phone']?.toString() ?? '',
       address: json['address']?.toString() ?? '',
+      role: json['role'],
       loyaltyPoints: _toInt(json['loyalty_points'] ?? json['loyaltyPoints']),
       totalSpent: _toDouble(json['total_spent'] ?? json['totalSpent']),
       loyaltyLevel: json['loyalty_level']?.toString() ??
@@ -46,6 +50,7 @@ class User {
       'email': email,
       'phone': phone,
       'address': address,
+      'role': role,
       'loyalty_points': loyaltyPoints,
       'total_spent': totalSpent,
       'loyalty_level': loyaltyLevel,
@@ -59,6 +64,7 @@ class User {
     String? email,
     String? phone,
     String? address,
+    String? role,
     int? loyaltyPoints,
     double? totalSpent,
     String? loyaltyLevel,
@@ -70,6 +76,7 @@ class User {
       email: email ?? this.email,
       phone: phone ?? this.phone,
       address: address ?? this.address,
+      role: role ?? this.role,
       loyaltyPoints: loyaltyPoints ?? this.loyaltyPoints,
       totalSpent: totalSpent ?? this.totalSpent,
       loyaltyLevel: loyaltyLevel ?? this.loyaltyLevel,

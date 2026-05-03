@@ -422,4 +422,27 @@ class ServerApiService {
       throw Exception('Ошибка обновления статуса заказа: ${response.body}');
     }
   }
+
+  static Future<void> updateProduct({
+    required int productId,
+    String? name,
+    String? description,
+    double? price,
+  }) async {
+    final response = await http.put(
+      Uri.parse("${AppConfig.baseUrl}/products/$productId"),
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: jsonEncode({
+        "name": name,
+        "description": description,
+        "price": price,
+      }),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception("Ошибка обновления товара");
+    }
+  }
 }

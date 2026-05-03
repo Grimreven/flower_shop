@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-
+import '../admin/edit_product_screen.dart';
 import '../../api/api_service.dart';
 import '../../controllers/auth_controller.dart';
 import '../../controllers/cart_controller.dart';
