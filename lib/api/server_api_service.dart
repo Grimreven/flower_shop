@@ -428,6 +428,10 @@ class ServerApiService {
     String? name,
     String? description,
     double? price,
+    String? imageUrl,
+    int? categoryId,
+    bool? inStock,
+    List<String>? care,
   }) async {
     final response = await http.put(
       Uri.parse("${AppConfig.baseUrl}/products/$productId"),
@@ -438,11 +442,59 @@ class ServerApiService {
         "name": name,
         "description": description,
         "price": price,
+        "image_url": imageUrl,
+        "category_id": categoryId,
+        "in_stock": inStock,
+        "care": care,
       }),
     );
 
     if (response.statusCode != 200) {
       throw Exception("Ошибка обновления товара");
     }
+  }
+
+  static Future<void> createProduct({
+    required String name,
+    String? description,
+    double? price,
+  }) async {
+    final response = await http.post(
+      Uri.parse("$baseUrl/products"),
+      headers: await _headers(auth: true),
+      body: jsonEncode({
+        "name": name,
+        "description": description,
+        "price": price,
+      }),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception("Ошибка создания товара");
+    }
+  }
+
+  static Future<void> deleteProduct(int productId) async {
+    final response = await http.delete(
+      Uri.parse("${AppConfig.baseUrl}/products/$productId"),
+      headers: await _headers(auth: true),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception("Ошибка удаления товара");
+    }
+  }
+
+  static Future<List<Map<String, dynamic>>> getCategories() async {
+    final response = await http.get(
+      Uri.parse("${AppConfig.baseUrl}/categories"),
+    );
+
+    if (response.statusCode == 200) {
+      final List data = jsonDecode(response.body);
+      return data.map((e) => Map<String, dynamic>.from(e)).toList();
+    }
+
+    throw Exception("Ошибка загрузки категорий");
   }
 }

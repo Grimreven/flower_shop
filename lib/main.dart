@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:get_storage/get_storage.dart';
 import 'screens/admin/edit_product_screen.dart';
+import 'screens/admin/admin_panel_screen.dart';
 import 'api/notification_service.dart';
 import 'bindings/app_bindings.dart';
 import 'controllers/auth_controller.dart';
@@ -245,7 +246,7 @@ class FlowerShopApp extends StatelessWidget {
             name: '/order_success',
             page: () => const OrderSuccessScreen(),
           ),
-          GetPage(name: '/admin', page: () => const EditProductScreen()),
+          GetPage(name:'/admin', page: () => const AdminPanelScreen()),
         ],
       ),
     );

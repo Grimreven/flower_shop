@@ -290,6 +290,20 @@ app.get("/products", async (req, res) => {
   }
 });
 
+// 📦 Категории
+app.get("/categories", async (req, res) => {
+  try {
+    const result = await pool.query(
+      "SELECT id, name FROM categories ORDER BY id"
+    );
+
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Ошибка GET /categories:", err);
+    res.status(500).json({ message: "Ошибка сервера" });
+  }
+});
+
 app.get("/products/popular", async (req, res) => {
   try {
     const result = await pool.query(
@@ -344,10 +358,53 @@ app.get("/products/:id/price-history", async (req, res) => {
   }
 });
 
+app.post("/products", authenticateToken, requireAdmin, async (req, res) => {
+  const { name, description, price } = req.body;
+
+  if (!name || !price) {
+    return res.status(400).json({ message: "Заполните имя и цену" });
+  }
+
+  try {
+    const result = await pool.query(
+      `INSERT INTO products (name, description, price)
+       VALUES ($1, $2, $3)
+       RETURNING *`,
+      [name, description || "", price]
+    );
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error("Ошибка POST /products:", err);
+    res.status(500).json({ message: "Ошибка сервера" });
+  }
+});
+
+// 🔥 ADMIN: удаление товара
+app.delete("/products/:id", authenticateToken, requireAdmin, async (req, res) => {
+  const productId = req.params.id;
+
+  try {
+    const result = await pool.query(
+      "DELETE FROM products WHERE id = $1 RETURNING *",
+      [productId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: "Товар не найден" });
+    }
+
+    res.json({ message: "Товар удалён" });
+  } catch (err) {
+    console.error("Ошибка DELETE /products:", err);
+    res.status(500).json({ message: "Ошибка сервера" });
+  }
+});
+
 // 🔥 ADMIN: обновление товара
 app.put("/products/:id", authenticateToken, requireAdmin, async (req, res) => {
   const productId = req.params.id;
-  const { name, description, price } = req.body;
+  const { name, description, price, image_url, category_id, in_stock, care } = req.body;
 
   try {
     const productResult = await pool.query(
@@ -378,10 +435,23 @@ app.put("/products/:id", authenticateToken, requireAdmin, async (req, res) => {
       `UPDATE products
        SET name = $1,
            description = $2,
-           price = $3
-       WHERE id = $4
+           price = $3,
+           image_url = $4,
+           category_id = $5,
+           in_stock = $6,
+           care = $7
+       WHERE id = $8
        RETURNING *`,
-      [newName, newDescription, newPrice, productId]
+      [
+        name ?? product.name,
+        description ?? product.description,
+        price ?? product.price,
+        image_url ?? product.image_url,
+        category_id ?? product.category_id,
+        in_stock ?? product.in_stock,
+        care ?? product.care,
+        productId,
+      ]
     );
 
     res.json(updated.rows[0]);

@@ -250,18 +250,7 @@ class _AuthScreenState extends State<AuthScreen>
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Align(
-                      alignment: Alignment.centerLeft,
-                      child: IconButton(
-                        icon: Icon(
-                          Icons.arrow_back_rounded,
-                          color: isDark
-                              ? AppColors.purpleLight
-                              : AppColors.primary,
-                        ),
-                        onPressed: () => Navigator.pop(context),
-                      ),
-                    ),
+                    const SizedBox(height: 10),
                     Container(
                       width: 90,
                       height: 90,
