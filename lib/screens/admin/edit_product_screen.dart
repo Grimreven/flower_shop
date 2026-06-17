@@ -66,25 +66,41 @@ class _EditProductScreenState extends State<EditProductScreen> {
   }
 
   Future<void> updateProduct() async {
+    final double? price =
+    double.tryParse(priceController.text.replaceAll(',', '.'));
+
+    if (price == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Введите корректную цену')),
+      );
+      return;
+    }
+
     try {
       await ServerApiService.updateProduct(
         productId: widget.product['id'],
-        name: nameController.text,
-        description: descriptionController.text,
-        price: double.tryParse(priceController.text),
-        imageUrl: imageController.text,
+        name: nameController.text.trim(),
+        description: descriptionController.text.trim(),
+        price: price,
+        imageUrl: imageController.text.trim(),
         categoryId: selectedCategoryId,
         inStock: inStock,
         care: careController.text
             .split(',')
             .map((e) => e.trim())
+            .where((e) => e.isNotEmpty)
             .toList(),
       );
 
-      Get.snackbar('Успех', 'Товар обновлён');
-      Get.back(result: true);
+      if (!mounted) return;
+
+      Navigator.of(context).pop(true);
     } catch (e) {
-      Get.snackbar('Ошибка', e.toString());
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Ошибка сохранения: $e')),
+      );
     }
   }
 

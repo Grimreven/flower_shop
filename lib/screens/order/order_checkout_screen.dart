@@ -6,16 +6,15 @@ import '../../controllers/auth_controller.dart';
 import '../../controllers/cart_controller.dart';
 import '../../controllers/order_controller.dart';
 import '../../controllers/payment_controller.dart';
-import '../../models/product.dart';
 import '../../models/cart_item.dart' as model;
 import '../../models/checkout_summary.dart';
 import '../../models/delivery_method.dart';
 import '../../models/payment_method_model.dart';
+import '../../models/product.dart';
 import '../../models/user_address.dart';
 import '../../utils/app_colors.dart';
 import 'order_success_screen.dart';
 
-// Вспомогательный класс для локального хранения товара
 class _LocalCartItem {
   final Product product;
   final int quantity;
@@ -48,7 +47,6 @@ class _OrderCheckoutScreenState extends State<OrderCheckoutScreen> {
   DeliveryMethod deliveryMethod = DeliveryMethod.delivery;
   int bonusToUse = 0;
 
-  // Локальное состояние для ВСЕХ данных
   List<UserAddress> _localAddresses = [];
   UserAddress? _localSelectedAddress;
   bool _isLoadingAddresses = true;
@@ -75,31 +73,33 @@ class _OrderCheckoutScreenState extends State<OrderCheckoutScreen> {
   }
 
   Future<void> _loadAllData() async {
-    // Загружаем адреса
     await addressBookController.loadAddresses();
-
-    // Загружаем способы оплаты
     await paymentController.loadPaymentMethods();
 
-    // Получаем данные из контроллеров
-    if (mounted) {
-      setState(() {
-        _localAddresses = List.from(addressBookController.addresses);
-        _localSelectedAddress = addressBookController.selectedAddress;
-        _isLoadingAddresses = false;
+    if (!mounted) return;
 
-        _localPaymentMethods = List.from(paymentController.paymentMethods);
-        _localSelectedPayment = paymentController.selectedPaymentMethod;
-        _isLoadingPayments = false;
+    setState(() {
+      _localAddresses = List<UserAddress>.from(addressBookController.addresses);
+      _localSelectedAddress = addressBookController.selectedAddress;
+      _isLoadingAddresses = false;
 
-        _cartTotalPrice = cartController.totalPrice;
-        _cartItems = cartController.items.map((item) => _LocalCartItem(
+      _localPaymentMethods =
+      List<PaymentMethodModel>.from(paymentController.paymentMethods);
+      _localSelectedPayment = paymentController.selectedPaymentMethod;
+      _isLoadingPayments = false;
+
+      _cartTotalPrice = cartController.totalPrice;
+      _cartItems = cartController.items
+          .map(
+            (item) => _LocalCartItem(
           product: item.product,
           quantity: item.quantity.value,
-        )).toList();
-        _userBonusPoints = authController.user.value?.loyaltyPoints ?? 0;
-      });
-    }
+        ),
+      )
+          .toList();
+
+      _userBonusPoints = authController.user.value?.loyaltyPoints ?? 0;
+    });
   }
 
   CheckoutSummary _buildSummary() {
@@ -175,9 +175,8 @@ class _OrderCheckoutScreenState extends State<OrderCheckoutScreen> {
         paymentStatus: paymentStatus,
         cardMask: cardMask,
         deliveryAddress: deliveryAddress,
-        addressId: deliveryMethod == DeliveryMethod.delivery
-            ? selectedAddress?.id
-            : null,
+        addressId:
+        deliveryMethod == DeliveryMethod.delivery ? selectedAddress?.id : null,
         recipientName: authController.user.value?.name ?? '',
         recipientPhone:
         authController.user.value?.phone ?? selectedAddress?.phone ?? '',
@@ -441,137 +440,194 @@ class _OrderCheckoutScreenState extends State<OrderCheckoutScreen> {
     final TextEditingController commentController = TextEditingController();
 
     bool isPrimary = _localAddresses.isEmpty;
+    bool isSaving = false;
 
-    final result = await Get.dialog<bool>(
-      StatefulBuilder(
-        builder: (context, setLocalState) {
-          final bool isDark = Theme.of(context).brightness == Brightness.dark;
-          final Color onSurface = Theme.of(context).colorScheme.onSurface;
+    try {
+      final bool? result = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) {
+          return StatefulBuilder(
+            builder: (context, setLocalState) {
+              final bool isDark =
+                  Theme.of(context).brightness == Brightness.dark;
+              final Color onSurface = Theme.of(context).colorScheme.onSurface;
 
-          return AlertDialog(
-            backgroundColor: Theme.of(context).cardColor,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(24),
-            ),
-            title: Text(
-              'Новый адрес',
-              style: TextStyle(
-                color: onSurface,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: titleController,
-                    decoration: const InputDecoration(
-                      labelText: 'Название адреса',
-                      hintText: 'Дом / Работа / Для мамы',
-                    ),
+              return AlertDialog(
+                backgroundColor: Theme.of(context).cardColor,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                title: Text(
+                  'Новый адрес',
+                  style: TextStyle(
+                    color: onSurface,
+                    fontWeight: FontWeight.w800,
                   ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: addressController,
-                    decoration: const InputDecoration(
-                      labelText: 'Адрес',
-                      hintText: 'Москва, Авиаторов 10, 1',
-                    ),
+                ),
+                content: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      TextField(
+                        controller: titleController,
+                        enabled: !isSaving,
+                        decoration: const InputDecoration(
+                          labelText: 'Название адреса',
+                          hintText: 'Дом / Работа / Для мамы',
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: addressController,
+                        enabled: !isSaving,
+                        decoration: const InputDecoration(
+                          labelText: 'Адрес',
+                          hintText: 'Москва, Авиаторов 10, 1',
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: apartmentController,
+                        enabled: !isSaving,
+                        decoration: const InputDecoration(
+                          labelText: 'Квартира',
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: entranceController,
+                        enabled: !isSaving,
+                        decoration: const InputDecoration(
+                          labelText: 'Подъезд',
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: floorController,
+                        enabled: !isSaving,
+                        decoration: const InputDecoration(
+                          labelText: 'Этаж',
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: commentController,
+                        enabled: !isSaving,
+                        decoration: const InputDecoration(
+                          labelText: 'Комментарий для курьера',
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        value: isPrimary,
+                        activeColor:
+                        isDark ? AppColors.purple : AppColors.primary,
+                        title: Text(
+                          'Сделать адресом по умолчанию',
+                          style: TextStyle(color: onSurface),
+                        ),
+                        onChanged: isSaving
+                            ? null
+                            : (value) {
+                          setLocalState(() {
+                            isPrimary = value;
+                          });
+                        },
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: apartmentController,
-                    decoration: const InputDecoration(
-                      labelText: 'Квартира',
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: entranceController,
-                    decoration: const InputDecoration(
-                      labelText: 'Подъезд',
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: floorController,
-                    decoration: const InputDecoration(
-                      labelText: 'Этаж',
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: commentController,
-                    decoration: const InputDecoration(
-                      labelText: 'Комментарий для курьера',
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    value: isPrimary,
-                    activeColor: isDark ? AppColors.purple : AppColors.primary,
-                    title: Text(
-                      'Сделать адресом по умолчанию',
-                      style: TextStyle(color: onSurface),
-                    ),
-                    onChanged: (value) {
-                      setLocalState(() {
-                        isPrimary = value;
-                      });
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: isSaving
+                        ? null
+                        : () {
+                      Navigator.of(dialogContext).pop(false);
                     },
+                    child: const Text('Отмена'),
+                  ),
+                  ElevatedButton(
+                    onPressed: isSaving
+                        ? null
+                        : () async {
+                      final String address =
+                      addressController.text.trim();
+
+                      if (address.isEmpty) {
+                        Get.snackbar('Ошибка', 'Введите адрес');
+                        return;
+                      }
+
+                      setLocalState(() {
+                        isSaving = true;
+                      });
+
+                      try {
+                        final UserAddress newAddress = UserAddress(
+                          id: 0,
+                          title: titleController.text.trim().isEmpty
+                              ? 'Новый адрес'
+                              : titleController.text.trim(),
+                          address: address,
+                          entrance: entranceController.text.trim(),
+                          floor: floorController.text.trim(),
+                          apartment: apartmentController.text.trim(),
+                          comment: commentController.text.trim(),
+                          isPrimary: isPrimary,
+                        );
+
+                        await addressBookController.addAddress(newAddress);
+
+                        if (!mounted) return;
+
+                        Navigator.of(dialogContext).pop(true);
+                      } catch (e) {
+                        if (!mounted) return;
+
+                        setLocalState(() {
+                          isSaving = false;
+                        });
+
+                        Get.snackbar(
+                          'Ошибка',
+                          'Не удалось сохранить адрес: $e',
+                          backgroundColor: Colors.redAccent,
+                          colorText: Colors.white,
+                        );
+                      }
+                    },
+                    child: isSaving
+                        ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                        : const Text('Сохранить'),
                   ),
                 ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Get.back(result: false),
-                child: const Text('Отмена'),
-              ),
-              ElevatedButton(
-                onPressed: () async {
-                  if (addressController.text.trim().isEmpty) {
-                    Get.snackbar('Ошибка', 'Введите адрес');
-                    return;
-                  }
-
-                  final newAddress = UserAddress(
-                    id: DateTime.now().millisecondsSinceEpoch,
-                    title: titleController.text.trim().isEmpty
-                        ? 'Новый адрес'
-                        : titleController.text.trim(),
-                    address: addressController.text.trim(),
-                    entrance: entranceController.text.trim(),
-                    floor: floorController.text.trim(),
-                    apartment: apartmentController.text.trim(),
-                    comment: commentController.text.trim(),
-                    isPrimary: isPrimary,
-                  );
-
-                  titleController.dispose();
-                  addressController.dispose();
-                  entranceController.dispose();
-                  floorController.dispose();
-                  apartmentController.dispose();
-                  commentController.dispose();
-
-                  // Сохраняем адрес
-                  await addressBookController.addAddress(newAddress);
-
-                  // Закрываем диалог с результатом true
-                  Get.back(result: true);
-                },
-                child: const Text('Сохранить'),
-              ),
-            ],
+              );
+            },
           );
         },
-      ),
-    );
-    if (result == true) {
-      await _loadAllData();
+      );
+
+      if (result == true && mounted) {
+        setState(() {
+          _localAddresses =
+          List<UserAddress>.from(addressBookController.addresses);
+          _localSelectedAddress = addressBookController.selectedAddress;
+          _isLoadingAddresses = false;
+        });
+      }
+    } finally {
+      titleController.dispose();
+      addressController.dispose();
+      entranceController.dispose();
+      floorController.dispose();
+      apartmentController.dispose();
+      commentController.dispose();
     }
   }
 
@@ -626,7 +682,6 @@ class _OrderCheckoutScreenState extends State<OrderCheckoutScreen> {
           padding: const EdgeInsets.all(16),
           child: Column(
             children: [
-              // Блок 1: Ваш заказ
               _block(
                 context,
                 child: Column(
@@ -710,7 +765,6 @@ class _OrderCheckoutScreenState extends State<OrderCheckoutScreen> {
                   ],
                 ),
               ),
-              // Блок 2: Способ получения
               _block(
                 context,
                 child: Column(
@@ -774,7 +828,6 @@ class _OrderCheckoutScreenState extends State<OrderCheckoutScreen> {
                   ],
                 ),
               ),
-              // Блок 3: Адрес доставки
               if (deliveryMethod == DeliveryMethod.delivery)
                 _block(
                   context,
@@ -824,7 +877,6 @@ class _OrderCheckoutScreenState extends State<OrderCheckoutScreen> {
                     ],
                   ),
                 ),
-              // Блок 4: Способ оплаты
               _block(
                 context,
                 child: Column(
@@ -844,7 +896,6 @@ class _OrderCheckoutScreenState extends State<OrderCheckoutScreen> {
                   ],
                 ),
               ),
-              // Блок 5: Комментарий к заказу
               _block(
                 context,
                 child: Column(
@@ -862,7 +913,6 @@ class _OrderCheckoutScreenState extends State<OrderCheckoutScreen> {
                   ],
                 ),
               ),
-              // Блок 6: Промокод
               _block(
                 context,
                 child: Column(
@@ -875,16 +925,14 @@ class _OrderCheckoutScreenState extends State<OrderCheckoutScreen> {
                         hintText: 'Введите промокод',
                         prefixIcon: Icon(
                           Icons.discount_outlined,
-                          color: isDark
-                              ? AppColors.purpleLight
-                              : AppColors.primary,
+                          color:
+                          isDark ? AppColors.purpleLight : AppColors.primary,
                         ),
                       ),
                     ),
                   ],
                 ),
               ),
-              // Блок 7: Оплата бонусами
               _block(
                 context,
                 child: Column(
@@ -908,18 +956,15 @@ class _OrderCheckoutScreenState extends State<OrderCheckoutScreen> {
                         children: [
                           SliderTheme(
                             data: SliderTheme.of(context).copyWith(
-                              activeTrackColor: isDark
-                                  ? AppColors.purple
-                                  : AppColors.primary,
-                              thumbColor: isDark
-                                  ? AppColors.purple
-                                  : AppColors.primary,
+                              activeTrackColor:
+                              isDark ? AppColors.purple : AppColors.primary,
+                              thumbColor:
+                              isDark ? AppColors.purple : AppColors.primary,
                               inactiveTrackColor: isDark
                                   ? AppColors.darkBorderSoft
                                   : AppColors.primaryLight,
-                              overlayColor: (isDark
-                                  ? AppColors.purple
-                                  : AppColors.primary)
+                              overlayColor:
+                              (isDark ? AppColors.purple : AppColors.primary)
                                   .withValues(alpha: 0.15),
                             ),
                             child: Slider(
@@ -949,7 +994,6 @@ class _OrderCheckoutScreenState extends State<OrderCheckoutScreen> {
                   ],
                 ),
               ),
-              // Блок 8: Итоги заказа
               _block(
                 context,
                 child: Column(
@@ -988,13 +1032,11 @@ class _OrderCheckoutScreenState extends State<OrderCheckoutScreen> {
                   ],
                 ),
               ),
-              // Итоговая сумма
               Container(
                 padding: const EdgeInsets.all(18),
                 decoration: BoxDecoration(
-                  gradient: isDark
-                      ? AppColors.darkBrandGradient
-                      : AppColors.brandGradient,
+                  gradient:
+                  isDark ? AppColors.darkBrandGradient : AppColors.brandGradient,
                   borderRadius: BorderRadius.circular(24),
                   boxShadow: [
                     BoxShadow(
@@ -1028,12 +1070,10 @@ class _OrderCheckoutScreenState extends State<OrderCheckoutScreen> {
                 ),
               ),
               const SizedBox(height: 18),
-              // Кнопка оформления заказа
               DecoratedBox(
                 decoration: BoxDecoration(
-                  gradient: isDark
-                      ? AppColors.darkBrandGradient
-                      : AppColors.brandGradient,
+                  gradient:
+                  isDark ? AppColors.darkBrandGradient : AppColors.brandGradient,
                   borderRadius: BorderRadius.circular(18),
                   boxShadow: [
                     BoxShadow(
@@ -1087,9 +1127,8 @@ class _OrderCheckoutScreenState extends State<OrderCheckoutScreen> {
         Text(
           title,
           style: TextStyle(
-            color: isDark
-                ? AppColors.darkMutedForeground
-                : AppColors.mutedForeground,
+            color:
+            isDark ? AppColors.darkMutedForeground : AppColors.mutedForeground,
             fontWeight: FontWeight.w500,
           ),
         ),

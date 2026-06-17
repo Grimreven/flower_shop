@@ -56,9 +56,7 @@ async function requireAdmin(req, res, next) {
     );
 
     if (result.rows[0]?.role_name !== "admin") {
-      return res.status(403).json({
-        message: "Только для администратора",
-      });
+      return res.status(403).json({ message: "Только для администратора" });
     }
 
     next();
@@ -71,6 +69,21 @@ async function requireAdmin(req, res, next) {
 function toNumber(value, fallback = 0) {
   const result = Number(value);
   return Number.isFinite(result) ? result : fallback;
+}
+
+function normalizeCare(care) {
+  if (care === undefined) return undefined;
+  if (care === null) return null;
+
+  if (typeof care === "string") {
+    try {
+      return JSON.stringify(JSON.parse(care));
+    } catch (_) {
+      return JSON.stringify([care]);
+    }
+  }
+
+  return JSON.stringify(care);
 }
 
 app.get("/", (req, res) => {
@@ -105,9 +118,10 @@ app.post("/register", async (req, res) => {
   }
 
   try {
-    const exists = await pool.query("SELECT id FROM customers WHERE email = $1", [
-      email,
-    ]);
+    const exists = await pool.query(
+      "SELECT id FROM customers WHERE email = $1",
+      [email]
+    );
 
     if (exists.rows.length > 0) {
       return res.status(400).json({ message: "Пользователь уже существует" });
@@ -131,22 +145,26 @@ app.post("/register", async (req, res) => {
     const levelId = levelResult.rows.length > 0 ? levelResult.rows[0].id : null;
 
     const result = await pool.query(
-      `INSERT INTO customers (name, email, password_hash, role_id)
-       VALUES ($1, $2, $3, $4)
-       RETURNING id, name, email, phone`,
+      `
+      INSERT INTO customers (name, email, password_hash, role_id)
+      VALUES ($1, $2, $3, $4)
+      RETURNING id, name, email, phone
+      `,
       [name, email, hashedPassword, roleId]
     );
 
     const user = result.rows[0];
 
     await pool.query(
-      `INSERT INTO loyalty_accounts (user_id, points, total_spent, level_id)
-       VALUES ($1, $2, $3, $4)`,
+      `
+      INSERT INTO loyalty_accounts (user_id, points, total_spent, level_id)
+      VALUES ($1, $2, $3, $4)
+      `,
       [user.id, 0, 0, levelId]
     );
 
     const token = jwt.sign(
-      { id: user.id, email: user.email },
+      { id: user.id, email: user.email, role: "customer" },
       process.env.JWT_SECRET || "mysecret",
       { expiresIn: "7d" }
     );
@@ -168,7 +186,7 @@ app.post("/login", async (req, res) => {
   try {
     const result = await pool.query(
       `
-      SELECT c.*, r.name as role_name
+      SELECT c.*, r.name AS role_name
       FROM customers c
       LEFT JOIN roles r ON r.id = c.role_id
       WHERE c.email = $1
@@ -213,25 +231,31 @@ app.post("/login", async (req, res) => {
   }
 });
 
+app.post("/logout", authenticateToken, async (req, res) => {
+  res.json({ message: "Выход выполнен успешно" });
+});
+
 app.get("/profile", authenticateToken, async (req, res) => {
   const userId = req.user.id;
 
   try {
     const result = await pool.query(
-      `SELECT c.id,
-              c.name,
-              c.email,
-              c.phone,
-              r.name AS role,
-              COALESCE(l.points, 0) AS loyalty_points,
-              COALESCE(l.total_spent, 0) AS total_spent,
-              COALESCE(levels.name, 'Bronze') AS loyalty_level,
-              COALESCE(levels.color_hex, '#CD7F32') AS loyalty_color
-       FROM customers c
-       LEFT JOIN roles r ON r.id = c.role_id
-       LEFT JOIN loyalty_accounts l ON l.user_id = c.id
-       LEFT JOIN loyalty_levels levels ON levels.id = l.level_id
-       WHERE c.id = $1`,
+      `
+      SELECT c.id,
+             c.name,
+             c.email,
+             c.phone,
+             r.name AS role,
+             COALESCE(l.points, 0) AS loyalty_points,
+             COALESCE(l.total_spent, 0) AS total_spent,
+             COALESCE(levels.name, 'Bronze') AS loyalty_level,
+             COALESCE(levels.color_hex, '#CD7F32') AS loyalty_color
+      FROM customers c
+      LEFT JOIN roles r ON r.id = c.role_id
+      LEFT JOIN loyalty_accounts l ON l.user_id = c.id
+      LEFT JOIN loyalty_levels levels ON levels.id = l.level_id
+      WHERE c.id = $1
+      `,
       [userId]
     );
 
@@ -252,10 +276,12 @@ app.put("/profile", authenticateToken, async (req, res) => {
 
   try {
     const result = await pool.query(
-      `UPDATE customers
-       SET name = $1, email = $2, phone = $3
-       WHERE id = $4
-       RETURNING id, name, email, phone`,
+      `
+      UPDATE customers
+      SET name = $1, email = $2, phone = $3
+      WHERE id = $4
+      RETURNING id, name, email, phone
+      `,
       [name, email, phone, userId]
     );
 
@@ -270,17 +296,15 @@ app.put("/profile", authenticateToken, async (req, res) => {
   }
 });
 
-app.post("/logout", authenticateToken, async (req, res) => {
-  res.json({ message: "Выход выполнен успешно" });
-});
-
 app.get("/products", async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT p.*, c.name AS category_name
-       FROM products p
-       LEFT JOIN categories c ON c.id = p.category_id
-       ORDER BY p.id DESC`
+      `
+      SELECT p.*, c.name AS category_name
+      FROM products p
+      LEFT JOIN categories c ON c.id = p.category_id
+      ORDER BY p.id DESC
+      `
     );
 
     res.json(result.rows);
@@ -290,7 +314,6 @@ app.get("/products", async (req, res) => {
   }
 });
 
-// 📦 Категории
 app.get("/categories", async (req, res) => {
   try {
     const result = await pool.query(
@@ -307,11 +330,13 @@ app.get("/categories", async (req, res) => {
 app.get("/products/popular", async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT p.*, c.name AS category_name
-       FROM products p
-       LEFT JOIN categories c ON c.id = p.category_id
-       ORDER BY p.rating DESC NULLS LAST, p.id DESC
-       LIMIT 6`
+      `
+      SELECT p.*, c.name AS category_name
+      FROM products p
+      LEFT JOIN categories c ON c.id = p.category_id
+      ORDER BY p.rating DESC NULLS LAST, p.id DESC
+      LIMIT 6
+      `
     );
 
     res.json(result.rows);
@@ -324,11 +349,13 @@ app.get("/products/popular", async (req, res) => {
 app.get("/products/:id/reviews", async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT r.*, c.name AS user_name
-       FROM reviews r
-       LEFT JOIN customers c ON c.id = r.user_id
-       WHERE r.product_id = $1
-       ORDER BY r.created_at DESC`,
+      `
+      SELECT r.*, c.name AS user_name
+      FROM reviews r
+      LEFT JOIN customers c ON c.id = r.user_id
+      WHERE r.product_id = $1
+      ORDER BY r.created_at DESC
+      `,
       [req.params.id]
     );
 
@@ -340,14 +367,20 @@ app.get("/products/:id/reviews", async (req, res) => {
 });
 
 app.get("/products/:id/price-history", async (req, res) => {
-  const productId = req.params.id;
+  const productId = Number(req.params.id);
 
   try {
     const result = await pool.query(
-      `SELECT price, changed_at
-       FROM product_price_history
-       WHERE product_id = $1
-       ORDER BY changed_at ASC`,
+      `
+      SELECT
+        old_price,
+        new_price,
+        new_price AS price,
+        changed_at
+      FROM product_price_history
+      WHERE product_id = $1
+      ORDER BY changed_at ASC
+      `,
       [productId]
     );
 
@@ -359,34 +392,165 @@ app.get("/products/:id/price-history", async (req, res) => {
 });
 
 app.post("/products", authenticateToken, requireAdmin, async (req, res) => {
-  const { name, description, price } = req.body;
+  const {
+    name,
+    description,
+    price,
+    image_url,
+    category_id,
+    in_stock,
+    care,
+  } = req.body;
 
-  if (!name || !price) {
-    return res.status(400).json({ message: "Заполните имя и цену" });
+  if (!name || price === undefined || price === null) {
+    return res.status(400).json({ message: "Заполните название и цену" });
+  }
+
+  const newPrice = Number(price);
+
+  if (!Number.isFinite(newPrice) || newPrice <= 0) {
+    return res.status(400).json({ message: "Цена должна быть положительным числом" });
   }
 
   try {
+    const normalizedCare = normalizeCare(care);
+
     const result = await pool.query(
-      `INSERT INTO products (name, description, price)
-       VALUES ($1, $2, $3)
-       RETURNING *`,
-      [name, description || "", price]
+      `
+      INSERT INTO products
+      (
+        name,
+        description,
+        price,
+        image_url,
+        category_id,
+        in_stock,
+        rating,
+        review_count,
+        care
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, 0, 0, $7)
+      RETURNING *
+      `,
+      [
+        name,
+        description || "",
+        newPrice,
+        image_url || "",
+        category_id || null,
+        in_stock ?? true,
+        normalizedCare === undefined ? null : normalizedCare,
+      ]
     );
 
-    res.json(result.rows[0]);
+    res.status(201).json(result.rows[0]);
   } catch (err) {
     console.error("Ошибка POST /products:", err);
-    res.status(500).json({ message: "Ошибка сервера" });
+    res.status(500).json({ message: "Ошибка сервера", error: err.message });
   }
 });
 
-// 🔥 ADMIN: удаление товара
+app.put("/products/:id", authenticateToken, requireAdmin, async (req, res) => {
+  const productId = Number(req.params.id);
+  const {
+    name,
+    description,
+    price,
+    image_url,
+    category_id,
+    in_stock,
+    care,
+  } = req.body;
+
+  try {
+    await pool.query("BEGIN");
+
+    const productResult = await pool.query(
+      "SELECT * FROM products WHERE id = $1",
+      [productId]
+    );
+
+    if (productResult.rows.length === 0) {
+      await pool.query("ROLLBACK");
+      return res.status(404).json({ message: "Товар не найден" });
+    }
+
+    const product = productResult.rows[0];
+
+    const oldPrice = Number(product.price);
+    const newPrice =
+      price === undefined || price === null ? oldPrice : Number(price);
+
+    if (!Number.isFinite(newPrice) || newPrice <= 0) {
+      await pool.query("ROLLBACK");
+      return res.status(400).json({ message: "Цена должна быть положительным числом" });
+    }
+
+    if (newPrice !== oldPrice) {
+      await pool.query(
+        `
+        INSERT INTO product_price_history
+        (
+          product_id,
+          old_price,
+          new_price,
+          changed_at,
+          changed_by
+        )
+        VALUES ($1, $2, $3, NOW(), $4)
+        `,
+        [productId, oldPrice, newPrice, req.user.id]
+      );
+    }
+
+    const normalizedCare = normalizeCare(care);
+
+    const updated = await pool.query(
+      `
+      UPDATE products
+      SET name = $1,
+          description = $2,
+          price = $3,
+          image_url = $4,
+          category_id = $5,
+          in_stock = $6,
+          care = $7
+      WHERE id = $8
+      RETURNING *
+      `,
+      [
+        name ?? product.name,
+        description ?? product.description,
+        newPrice,
+        image_url ?? product.image_url,
+        category_id ?? product.category_id,
+        in_stock ?? product.in_stock,
+        normalizedCare === undefined ? product.care : normalizedCare,
+        productId,
+      ]
+    );
+
+    await pool.query("COMMIT");
+
+    res.json(updated.rows[0]);
+  } catch (err) {
+    await pool.query("ROLLBACK");
+    console.error("Ошибка PUT /products/:id:", err);
+    res.status(500).json({ message: "Ошибка сервера", error: err.message });
+  }
+});
+
 app.delete("/products/:id", authenticateToken, requireAdmin, async (req, res) => {
-  const productId = req.params.id;
+  const productId = Number(req.params.id);
 
   try {
     const result = await pool.query(
-      "DELETE FROM products WHERE id = $1 RETURNING *",
+      `
+      UPDATE products
+      SET in_stock = false
+      WHERE id = $1
+      RETURNING *
+      `,
       [productId]
     );
 
@@ -394,70 +558,10 @@ app.delete("/products/:id", authenticateToken, requireAdmin, async (req, res) =>
       return res.status(404).json({ message: "Товар не найден" });
     }
 
-    res.json({ message: "Товар удалён" });
+    res.json({ message: "Товар скрыт из каталога", product: result.rows[0] });
   } catch (err) {
-    console.error("Ошибка DELETE /products:", err);
-    res.status(500).json({ message: "Ошибка сервера" });
-  }
-});
-
-// 🔥 ADMIN: обновление товара
-app.put("/products/:id", authenticateToken, requireAdmin, async (req, res) => {
-  const productId = req.params.id;
-  const { name, description, price, image_url, category_id, in_stock, care } = req.body;
-
-  try {
-    const productResult = await pool.query(
-      "SELECT * FROM products WHERE id = $1",
-      [productId]
-    );
-
-    if (productResult.rows.length === 0) {
-      return res.status(404).json({ message: "Товар не найден" });
-    }
-
-    const product = productResult.rows[0];
-
-    const newName = name ?? product.name;
-    const newDescription = description ?? product.description;
-    const newPrice = price ?? product.price;
-
-    // история цены
-    if (Number(newPrice) !== Number(product.price)) {
-      await pool.query(
-        `INSERT INTO product_price_history (product_id, price, changed_at)
-         VALUES ($1, $2, NOW())`,
-        [productId, newPrice]
-      );
-    }
-
-    const updated = await pool.query(
-      `UPDATE products
-       SET name = $1,
-           description = $2,
-           price = $3,
-           image_url = $4,
-           category_id = $5,
-           in_stock = $6,
-           care = $7
-       WHERE id = $8
-       RETURNING *`,
-      [
-        name ?? product.name,
-        description ?? product.description,
-        price ?? product.price,
-        image_url ?? product.image_url,
-        category_id ?? product.category_id,
-        in_stock ?? product.in_stock,
-        care ?? product.care,
-        productId,
-      ]
-    );
-
-    res.json(updated.rows[0]);
-  } catch (err) {
-    console.error("Ошибка ADMIN PUT /products:", err);
-    res.status(500).json({ message: "Ошибка сервера" });
+    console.error("Ошибка DELETE /products/:id:", err);
+    res.status(500).json({ message: "Ошибка сервера", error: err.message });
   }
 });
 
@@ -465,9 +569,10 @@ app.get("/cart", authenticateToken, async (req, res) => {
   const userId = req.user.id;
 
   try {
-    const cartResult = await pool.query("SELECT id FROM carts WHERE user_id = $1", [
-      userId,
-    ]);
+    const cartResult = await pool.query(
+      "SELECT id FROM carts WHERE user_id = $1",
+      [userId]
+    );
 
     let cartId;
 
@@ -483,24 +588,26 @@ app.get("/cart", authenticateToken, async (req, res) => {
     }
 
     const items = await pool.query(
-      `SELECT ci.id,
-              ci.product_id,
-              ci.quantity,
-              p.name,
-              p.price,
-              p.image_url,
-              p.description,
-              p.category_id,
-              c.name AS category_name,
-              p.rating,
-              p.in_stock,
-              p.review_count,
-              p.care
-       FROM cart_items ci
-       JOIN products p ON p.id = ci.product_id
-       LEFT JOIN categories c ON c.id = p.category_id
-       WHERE ci.cart_id = $1
-       ORDER BY ci.id DESC`,
+      `
+      SELECT ci.id,
+             ci.product_id,
+             ci.quantity,
+             p.name,
+             p.price,
+             p.image_url,
+             p.description,
+             p.category_id,
+             c.name AS category_name,
+             p.rating,
+             p.in_stock,
+             p.review_count,
+             p.care
+      FROM cart_items ci
+      JOIN products p ON p.id = ci.product_id
+      LEFT JOIN categories c ON c.id = p.category_id
+      WHERE ci.cart_id = $1
+      ORDER BY ci.id DESC
+      `,
       [cartId]
     );
 
@@ -525,9 +632,10 @@ app.post("/cart", authenticateToken, async (req, res) => {
     ]);
 
     if (cart.rows.length === 0) {
-      cart = await pool.query("INSERT INTO carts (user_id) VALUES ($1) RETURNING id", [
-        userId,
-      ]);
+      cart = await pool.query(
+        "INSERT INTO carts (user_id) VALUES ($1) RETURNING id",
+        [userId]
+      );
     }
 
     const cartId = cart.rows[0].id;
@@ -538,7 +646,7 @@ app.post("/cart", authenticateToken, async (req, res) => {
     );
 
     if (existing.rows.length > 0) {
-      const newQuantity = existing.rows[0].quantity + quantity;
+      const newQuantity = Number(existing.rows[0].quantity) + Number(quantity);
 
       await pool.query("UPDATE cart_items SET quantity = $1 WHERE id = $2", [
         newQuantity,
@@ -604,7 +712,7 @@ app.delete("/cart/:product_id", authenticateToken, async (req, res) => {
 
     res.json({ message: "Товар удалён из корзины" });
   } catch (err) {
-    console.error("Ошибка DELETE /cart:", err);
+    console.error("Ошибка DELETE /cart/:product_id:", err);
     res.status(500).json({ message: "Ошибка сервера", error: err.message });
   }
 });
@@ -654,15 +762,17 @@ app.post("/favorites/:product_id", authenticateToken, async (req, res) => {
 
   try {
     await pool.query(
-      `INSERT INTO favorites (user_id, product_id)
-       VALUES ($1, $2)
-       ON CONFLICT (user_id, product_id) DO NOTHING`,
+      `
+      INSERT INTO favorites (user_id, product_id)
+      VALUES ($1, $2)
+      ON CONFLICT (user_id, product_id) DO NOTHING
+      `,
       [userId, productId]
     );
 
     res.json({ message: "Товар добавлен в избранное" });
   } catch (err) {
-    console.error("Ошибка POST /favorites:", err);
+    console.error("Ошибка POST /favorites/:product_id:", err);
     res.status(500).json({ message: "Ошибка сервера", error: err.message });
   }
 });
@@ -672,14 +782,14 @@ app.delete("/favorites/:product_id", authenticateToken, async (req, res) => {
   const productId = Number(req.params.product_id);
 
   try {
-    await pool.query("DELETE FROM favorites WHERE user_id = $1 AND product_id = $2", [
-      userId,
-      productId,
-    ]);
+    await pool.query(
+      "DELETE FROM favorites WHERE user_id = $1 AND product_id = $2",
+      [userId, productId]
+    );
 
     res.json({ message: "Товар удалён из избранного" });
   } catch (err) {
-    console.error("Ошибка DELETE /favorites:", err);
+    console.error("Ошибка DELETE /favorites/:product_id:", err);
     res.status(500).json({ message: "Ошибка сервера", error: err.message });
   }
 });
@@ -702,24 +812,26 @@ app.get("/addresses", authenticateToken, async (req, res) => {
 
   try {
     const result = await pool.query(
-      `SELECT id,
-              user_id,
-              title,
-              recipient_name,
-              phone,
-              city,
-              street,
-              house,
-              apartment,
-              entrance,
-              floor,
-              comment,
-              is_default,
-              created_at,
-              updated_at
-       FROM customer_addresses
-       WHERE user_id = $1
-       ORDER BY is_default DESC, id DESC`,
+      `
+      SELECT id,
+             user_id,
+             title,
+             recipient_name,
+             phone,
+             city,
+             street,
+             house,
+             apartment,
+             entrance,
+             floor,
+             comment,
+             is_default,
+             created_at,
+             updated_at
+      FROM customer_addresses
+      WHERE user_id = $1
+      ORDER BY is_default DESC, id DESC
+      `,
       [userId]
     );
 
@@ -768,10 +880,26 @@ app.post("/addresses", authenticateToken, async (req, res) => {
     }
 
     const result = await pool.query(
-      `INSERT INTO customer_addresses
-       (user_id, title, recipient_name, phone, city, street, house, apartment, entrance, floor, comment, is_default)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
-       RETURNING id, user_id, title, recipient_name, phone, city, street, house, apartment, entrance, floor, comment, is_default, created_at, updated_at`,
+      `
+      INSERT INTO customer_addresses
+      (
+        user_id,
+        title,
+        recipient_name,
+        phone,
+        city,
+        street,
+        house,
+        apartment,
+        entrance,
+        floor,
+        comment,
+        is_default
+      )
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+      RETURNING id, user_id, title, recipient_name, phone, city, street, house,
+                apartment, entrance, floor, comment, is_default, created_at, updated_at
+      `,
       [
         userId,
         title || "Адрес",
@@ -829,21 +957,24 @@ app.put("/addresses/:id", authenticateToken, async (req, res) => {
     }
 
     const result = await pool.query(
-      `UPDATE customer_addresses
-       SET title = $1,
-           recipient_name = $2,
-           phone = $3,
-           city = $4,
-           street = $5,
-           house = $6,
-           apartment = $7,
-           entrance = $8,
-           floor = $9,
-           comment = $10,
-           is_default = $11,
-           updated_at = now()
-       WHERE id = $12 AND user_id = $13
-       RETURNING id, user_id, title, recipient_name, phone, city, street, house, apartment, entrance, floor, comment, is_default, created_at, updated_at`,
+      `
+      UPDATE customer_addresses
+      SET title = $1,
+          recipient_name = $2,
+          phone = $3,
+          city = $4,
+          street = $5,
+          house = $6,
+          apartment = $7,
+          entrance = $8,
+          floor = $9,
+          comment = $10,
+          is_default = $11,
+          updated_at = now()
+      WHERE id = $12 AND user_id = $13
+      RETURNING id, user_id, title, recipient_name, phone, city, street, house,
+                apartment, entrance, floor, comment, is_default, created_at, updated_at
+      `,
       [
         title || "Адрес",
         recipient_name || null,
@@ -924,14 +1055,8 @@ app.post("/orders", authenticateToken, async (req, res) => {
   }
 
   function resolveLevelName(totalSpent) {
-    if (totalSpent >= 15000) {
-      return "Gold";
-    }
-
-    if (totalSpent >= 5000) {
-      return "Silver";
-    }
-
+    if (totalSpent >= 15000) return "Gold";
+    if (totalSpent >= 5000) return "Silver";
     return "Bronze";
   }
 
@@ -968,10 +1093,12 @@ app.post("/orders", authenticateToken, async (req, res) => {
     );
 
     let loyaltyAccountResult = await pool.query(
-      `SELECT id, points, total_spent, level_id
-       FROM loyalty_accounts
-       WHERE user_id = $1
-       FOR UPDATE`,
+      `
+      SELECT id, points, total_spent, level_id
+      FROM loyalty_accounts
+      WHERE user_id = $1
+      FOR UPDATE
+      `,
       [userId]
     );
 
@@ -988,9 +1115,11 @@ app.post("/orders", authenticateToken, async (req, res) => {
       }
 
       const createdAccountResult = await pool.query(
-        `INSERT INTO loyalty_accounts (user_id, points, total_spent, level_id)
-         VALUES ($1, 0, 0, $2)
-         RETURNING id, points, total_spent, level_id`,
+        `
+        INSERT INTO loyalty_accounts (user_id, points, total_spent, level_id)
+        VALUES ($1, 0, 0, $2)
+        RETURNING id, points, total_spent, level_id
+        `,
         [userId, bronzeLevelResult.rows[0].id]
       );
 
@@ -998,10 +1127,12 @@ app.post("/orders", authenticateToken, async (req, res) => {
     }
 
     const levelResult = await pool.query(
-      `SELECT name, multiplier
-       FROM loyalty_levels
-       WHERE id = $1
-       LIMIT 1`,
+      `
+      SELECT name, multiplier
+      FROM loyalty_levels
+      WHERE id = $1
+      LIMIT 1
+      `,
       [loyaltyAccount.level_id]
     );
 
@@ -1028,9 +1159,7 @@ app.post("/orders", authenticateToken, async (req, res) => {
     const bonusEarned = Math.floor(paidForProducts * currentMultiplier);
     const total = paidForProducts + deliveryPrice;
 
-    const newTotalSpent =
-      Number(loyaltyAccount.total_spent || 0) + paidForProducts;
-
+    const newTotalSpent = Number(loyaltyAccount.total_spent || 0) + paidForProducts;
     const newLevelName = resolveLevelName(newTotalSpent);
 
     const newLevelResult = await pool.query(
@@ -1044,7 +1173,8 @@ app.post("/orders", authenticateToken, async (req, res) => {
         : loyaltyAccount.level_id;
 
     const orderRes = await pool.query(
-      `INSERT INTO orders (
+      `
+      INSERT INTO orders (
         user_id,
         total,
         status,
@@ -1054,11 +1184,12 @@ app.post("/orders", authenticateToken, async (req, res) => {
         bonus_earned
       )
       VALUES ($1, $2, $3, $4, $5, $6, $7)
-      RETURNING *`,
+      RETURNING *
+      `,
       [
         userId,
         total,
-        "Заказ собирается",
+        "Новый",
         itemsTotal,
         deliveryPrice,
         bonusApplied,
@@ -1070,21 +1201,25 @@ app.post("/orders", authenticateToken, async (req, res) => {
 
     for (const item of items) {
       await pool.query(
-        `INSERT INTO order_items (order_id, product_id, quantity, price)
-         VALUES ($1, $2, $3, (SELECT price FROM products WHERE id = $2))`,
+        `
+        INSERT INTO order_items (order_id, product_id, quantity, price)
+        VALUES ($1, $2, $3, (SELECT price FROM products WHERE id = $2))
+        `,
         [orderId, item.product_id, item.quantity]
       );
     }
 
     if (bonusApplied > 0) {
       await pool.query(
-        `INSERT INTO loyalty_transactions (
+        `
+        INSERT INTO loyalty_transactions (
           loyalty_account_id,
           type,
           points,
           description
         )
-        VALUES ($1, $2, $3, $4)`,
+        VALUES ($1, $2, $3, $4)
+        `,
         [
           loyaltyAccount.id,
           "spend",
@@ -1096,13 +1231,15 @@ app.post("/orders", authenticateToken, async (req, res) => {
 
     if (bonusEarned > 0) {
       await pool.query(
-        `INSERT INTO loyalty_transactions (
+        `
+        INSERT INTO loyalty_transactions (
           loyalty_account_id,
           type,
           points,
           description
         )
-        VALUES ($1, $2, $3, $4)`,
+        VALUES ($1, $2, $3, $4)
+        `,
         [
           loyaltyAccount.id,
           "earn",
@@ -1113,13 +1250,14 @@ app.post("/orders", authenticateToken, async (req, res) => {
     }
 
     await pool.query(
-      `UPDATE loyalty_accounts
-       SET
-        points = points - $1 + $2,
-        total_spent = $3,
-        level_id = $4,
-        updated_at = NOW()
-       WHERE id = $5`,
+      `
+      UPDATE loyalty_accounts
+      SET points = points - $1 + $2,
+          total_spent = $3,
+          level_id = $4,
+          updated_at = NOW()
+      WHERE id = $5
+      `,
       [bonusApplied, bonusEarned, newTotalSpent, newLevelId, loyaltyAccount.id]
     );
 
@@ -1153,7 +1291,8 @@ app.post("/orders", authenticateToken, async (req, res) => {
     const transactionStatus = paymentMethod === "cash" ? "pending" : "paid";
 
     await pool.query(
-      `INSERT INTO order_delivery_details (
+      `
+      INSERT INTO order_delivery_details (
         order_id,
         address_id,
         recipient_name,
@@ -1166,7 +1305,8 @@ app.post("/orders", authenticateToken, async (req, res) => {
         comment,
         delivery_price
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      `,
       [
         orderId,
         checkoutData.address_id || checkoutData.addressId || null,
@@ -1175,9 +1315,7 @@ app.post("/orders", authenticateToken, async (req, res) => {
         fullAddress,
         deliveryMethod,
         checkoutData.delivery_date || checkoutData.deliveryDate || null,
-        checkoutData.delivery_time_from ||
-          checkoutData.deliveryTimeFrom ||
-          null,
+        checkoutData.delivery_time_from || checkoutData.deliveryTimeFrom || null,
         checkoutData.delivery_time_to || checkoutData.deliveryTimeTo || null,
         checkoutData.comment ||
           checkoutData.recipient_comment ||
@@ -1188,18 +1326,21 @@ app.post("/orders", authenticateToken, async (req, res) => {
     );
 
     await pool.query(
-      `INSERT INTO order_payment_details (
+      `
+      INSERT INTO order_payment_details (
         order_id,
         payment_method,
         payment_status,
         payment_amount
       )
-      VALUES ($1, $2, $3, $4)`,
+      VALUES ($1, $2, $3, $4)
+      `,
       [orderId, paymentMethod, paymentStatus, total]
     );
 
     await pool.query(
-      `INSERT INTO payment_transactions (
+      `
+      INSERT INTO payment_transactions (
         order_id,
         user_id,
         payment_type,
@@ -1208,7 +1349,8 @@ app.post("/orders", authenticateToken, async (req, res) => {
         provider,
         paid_at
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `,
       [
         orderId,
         userId,
@@ -1222,7 +1364,7 @@ app.post("/orders", authenticateToken, async (req, res) => {
 
     await pool.query(
       "INSERT INTO order_history (order_id, status) VALUES ($1, $2)",
-      [orderId, "Заказ собирается"]
+      [orderId, "Новый"]
     );
 
     const cartResult = await pool.query(
@@ -1239,42 +1381,43 @@ app.post("/orders", authenticateToken, async (req, res) => {
     await pool.query("COMMIT");
 
     const newOrder = await pool.query(
-      `SELECT
-        o.*,
-        odd.delivery_price AS delivery_cost,
-        opd.payment_method,
-        opd.payment_status,
-        odd.full_address AS delivery_address,
-        (
-          SELECT json_agg(
-            json_build_object(
-              'product_id', oi.product_id,
-              'quantity', oi.quantity,
-              'price', oi.price,
-              'name', p.name,
-              'image_url', p.image_url
-            )
-          )
-          FROM order_items oi
-          LEFT JOIN products p ON p.id = oi.product_id
-          WHERE oi.order_id = o.id
-        ) AS items,
-        (
-          SELECT row_to_json(d)
-          FROM order_delivery_details d
-          WHERE d.order_id = o.id
-          LIMIT 1
-        ) AS delivery,
-        (
-          SELECT row_to_json(p)
-          FROM order_payment_details p
-          WHERE p.order_id = o.id
-          LIMIT 1
-        ) AS payment
-       FROM orders o
-       LEFT JOIN order_delivery_details odd ON odd.order_id = o.id
-       LEFT JOIN order_payment_details opd ON opd.order_id = o.id
-       WHERE o.id = $1`,
+      `
+      SELECT o.*,
+             odd.delivery_price AS delivery_cost,
+             opd.payment_method,
+             opd.payment_status,
+             odd.full_address AS delivery_address,
+             (
+               SELECT json_agg(
+                 json_build_object(
+                   'product_id', oi.product_id,
+                   'quantity', oi.quantity,
+                   'price', oi.price,
+                   'name', p.name,
+                   'image_url', p.image_url
+                 )
+               )
+               FROM order_items oi
+               LEFT JOIN products p ON p.id = oi.product_id
+               WHERE oi.order_id = o.id
+             ) AS items,
+             (
+               SELECT row_to_json(d)
+               FROM order_delivery_details d
+               WHERE d.order_id = o.id
+               LIMIT 1
+             ) AS delivery,
+             (
+               SELECT row_to_json(p)
+               FROM order_payment_details p
+               WHERE p.order_id = o.id
+               LIMIT 1
+             ) AS payment
+      FROM orders o
+      LEFT JOIN order_delivery_details odd ON odd.order_id = o.id
+      LEFT JOIN order_payment_details opd ON opd.order_id = o.id
+      WHERE o.id = $1
+      `,
       [orderId]
     );
 
@@ -1296,29 +1439,30 @@ app.get("/orders", authenticateToken, async (req, res) => {
 
   try {
     const ordersRes = await pool.query(
-      `SELECT
-        o.*,
-        odd.delivery_price AS delivery_cost,
-        odd.full_address AS delivery_address,
-        opd.payment_method,
-        opd.payment_status,
-        (
-          SELECT row_to_json(d)
-          FROM order_delivery_details d
-          WHERE d.order_id = o.id
-          LIMIT 1
-        ) AS delivery,
-        (
-          SELECT row_to_json(p)
-          FROM order_payment_details p
-          WHERE p.order_id = o.id
-          LIMIT 1
-        ) AS payment
-       FROM orders o
-       LEFT JOIN order_delivery_details odd ON odd.order_id = o.id
-       LEFT JOIN order_payment_details opd ON opd.order_id = o.id
-       WHERE o.user_id = $1
-       ORDER BY o.created_at DESC`,
+      `
+      SELECT o.*,
+             odd.delivery_price AS delivery_cost,
+             odd.full_address AS delivery_address,
+             opd.payment_method,
+             opd.payment_status,
+             (
+               SELECT row_to_json(d)
+               FROM order_delivery_details d
+               WHERE d.order_id = o.id
+               LIMIT 1
+             ) AS delivery,
+             (
+               SELECT row_to_json(p)
+               FROM order_payment_details p
+               WHERE p.order_id = o.id
+               LIMIT 1
+             ) AS payment
+      FROM orders o
+      LEFT JOIN order_delivery_details odd ON odd.order_id = o.id
+      LEFT JOIN order_payment_details opd ON opd.order_id = o.id
+      WHERE o.user_id = $1
+      ORDER BY o.created_at DESC
+      `,
       [userId]
     );
 
@@ -1326,13 +1470,14 @@ app.get("/orders", authenticateToken, async (req, res) => {
 
     for (const order of ordersRes.rows) {
       const itemsRes = await pool.query(
-        `SELECT
-          oi.*,
-          p.name,
-          p.image_url
-         FROM order_items oi
-         JOIN products p ON p.id = oi.product_id
-         WHERE oi.order_id = $1`,
+        `
+        SELECT oi.*,
+               p.name,
+               p.image_url
+        FROM order_items oi
+        JOIN products p ON p.id = oi.product_id
+        WHERE oi.order_id = $1
+        `,
         [order.id]
       );
 
@@ -1355,37 +1500,39 @@ app.get("/orders/:id", authenticateToken, async (req, res) => {
 
   try {
     const result = await pool.query(
-      `SELECT o.*,
-              COALESCE(
-                (
-                  SELECT json_agg(
-                    json_build_object(
-                      'id', oi.id,
-                      'order_id', oi.order_id,
-                      'product_id', oi.product_id,
-                      'quantity', oi.quantity,
-                      'price', oi.price,
-                      'name', p.name,
-                      'image_url', p.image_url
-                    )
-                    ORDER BY oi.id
-                  )
-                  FROM order_items oi
-                  LEFT JOIN products p ON p.id = oi.product_id
-                  WHERE oi.order_id = o.id
-                ),
-                '[]'::json
-              ) AS items,
-              row_to_json(odd.*) AS delivery,
-              row_to_json(opd.*) AS payment,
-              odd.full_address AS delivery_address,
-              odd.delivery_price AS delivery_cost,
-              opd.payment_method AS payment_method,
-              opd.payment_status AS payment_status
-       FROM orders o
-       LEFT JOIN order_delivery_details odd ON odd.order_id = o.id
-       LEFT JOIN order_payment_details opd ON opd.order_id = o.id
-       WHERE o.id = $1 AND o.user_id = $2`,
+      `
+      SELECT o.*,
+             COALESCE(
+               (
+                 SELECT json_agg(
+                   json_build_object(
+                     'id', oi.id,
+                     'order_id', oi.order_id,
+                     'product_id', oi.product_id,
+                     'quantity', oi.quantity,
+                     'price', oi.price,
+                     'name', p.name,
+                     'image_url', p.image_url
+                   )
+                   ORDER BY oi.id
+                 )
+                 FROM order_items oi
+                 LEFT JOIN products p ON p.id = oi.product_id
+                 WHERE oi.order_id = o.id
+               ),
+               '[]'::json
+             ) AS items,
+             row_to_json(odd.*) AS delivery,
+             row_to_json(opd.*) AS payment,
+             odd.full_address AS delivery_address,
+             odd.delivery_price AS delivery_cost,
+             opd.payment_method AS payment_method,
+             opd.payment_status AS payment_status
+      FROM orders o
+      LEFT JOIN order_delivery_details odd ON odd.order_id = o.id
+      LEFT JOIN order_payment_details opd ON opd.order_id = o.id
+      WHERE o.id = $1 AND o.user_id = $2
+      `,
       [orderId, userId]
     );
 
@@ -1424,15 +1571,104 @@ app.put("/orders/:id/status", authenticateToken, async (req, res) => {
       orderId,
     ]);
 
-    await pool.query("INSERT INTO order_history (order_id, status) VALUES ($1, $2)", [
-      orderId,
-      status,
-    ]);
+    await pool.query(
+      "INSERT INTO order_history (order_id, status) VALUES ($1, $2)",
+      [orderId, status]
+    );
 
     res.json({ message: "Статус заказа обновлён" });
   } catch (err) {
     console.error("Ошибка PUT /orders/:id/status:", err);
     res.status(500).json({ message: "Ошибка сервера", error: err.message });
+  }
+});
+
+app.get("/admin/orders", authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `
+      SELECT
+        o.id,
+        o.user_id,
+        c.name AS customer_name,
+        c.email AS customer_email,
+        c.phone AS customer_phone,
+        o.status,
+        o.total,
+        o.items_total,
+        o.delivery_cost,
+        o.bonus_applied,
+        o.bonus_earned,
+        o.created_at,
+        odd.full_address AS delivery_address,
+        odd.delivery_method,
+        opd.payment_method,
+        opd.payment_status,
+        COALESCE(
+          (
+            SELECT json_agg(
+              json_build_object(
+                'product_id', oi.product_id,
+                'name', p.name,
+                'quantity', oi.quantity,
+                'price', oi.price,
+                'image_url', p.image_url
+              )
+            )
+            FROM order_items oi
+            LEFT JOIN products p ON p.id = oi.product_id
+            WHERE oi.order_id = o.id
+          ),
+          '[]'::json
+        ) AS items
+      FROM orders o
+      LEFT JOIN customers c ON c.id = o.user_id
+      LEFT JOIN order_delivery_details odd ON odd.order_id = o.id
+      LEFT JOIN order_payment_details opd ON opd.order_id = o.id
+      ORDER BY o.created_at DESC
+      `
+    );
+
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Ошибка GET /admin/orders:", err);
+    res.status(500).json({ message: "Ошибка загрузки заказов", error: err.message });
+  }
+});
+
+app.put("/admin/orders/:id/status", authenticateToken, requireAdmin, async (req, res) => {
+  const orderId = Number(req.params.id);
+  const { status } = req.body;
+
+  if (!status) {
+    return res.status(400).json({ message: "Не указан статус заказа" });
+  }
+
+  try {
+    await pool.query("BEGIN");
+
+    const result = await pool.query(
+      "UPDATE orders SET status = $1 WHERE id = $2 RETURNING *",
+      [status, orderId]
+    );
+
+    if (result.rows.length === 0) {
+      await pool.query("ROLLBACK");
+      return res.status(404).json({ message: "Заказ не найден" });
+    }
+
+    await pool.query(
+      "INSERT INTO order_history (order_id, status) VALUES ($1, $2)",
+      [orderId, status]
+    );
+
+    await pool.query("COMMIT");
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    await pool.query("ROLLBACK");
+    console.error("Ошибка PUT /admin/orders/:id/status:", err);
+    res.status(500).json({ message: "Ошибка обновления статуса", error: err.message });
   }
 });
 

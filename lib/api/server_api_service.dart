@@ -175,6 +175,19 @@ class ServerApiService {
     throw Exception('Ошибка загрузки популярных товаров: ${response.body}');
   }
 
+  static Future<List<Map<String, dynamic>>> getCategories() async {
+    final http.Response response = await http.get(
+      Uri.parse('$baseUrl/categories'),
+      headers: await _headers(),
+    );
+
+    if (response.statusCode == 200) {
+      return _decodeList(response);
+    }
+
+    throw Exception('Ошибка загрузки категорий: ${response.body}');
+  }
+
   static Future<List<Map<String, dynamic>>> getCart() async {
     final http.Response response = await http.get(
       Uri.parse('$baseUrl/cart'),
@@ -423,6 +436,38 @@ class ServerApiService {
     }
   }
 
+  static Future<Map<String, dynamic>> createProduct({
+    required String name,
+    String? description,
+    required double price,
+    String? imageUrl,
+    int? categoryId,
+    bool inStock = true,
+    List? care,
+  }) async {
+    final http.Response response = await http.post(
+      Uri.parse('$baseUrl/products'),
+      headers: await _headers(auth: true),
+      body: jsonEncode({
+        'name': name,
+        'description': description ?? '',
+        'price': price,
+        'image_url': imageUrl ?? '',
+        'category_id': categoryId,
+        'in_stock': inStock,
+        'care': care,
+      }),
+    );
+
+    final Map<String, dynamic> data = _decodeMap(response);
+
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      return data;
+    }
+
+    throw Exception(data['message'] ?? 'Ошибка создания товара');
+  }
+
   static Future<void> updateProduct({
     required int productId,
     String? name,
@@ -431,70 +476,78 @@ class ServerApiService {
     String? imageUrl,
     int? categoryId,
     bool? inStock,
-    List<String>? care,
+    List? care,
   }) async {
-    final response = await http.put(
-      Uri.parse("${AppConfig.baseUrl}/products/$productId"),
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: jsonEncode({
-        "name": name,
-        "description": description,
-        "price": price,
-        "image_url": imageUrl,
-        "category_id": categoryId,
-        "in_stock": inStock,
-        "care": care,
-      }),
-    );
-
-    if (response.statusCode != 200) {
-      throw Exception("Ошибка обновления товара");
-    }
-  }
-
-  static Future<void> createProduct({
-    required String name,
-    String? description,
-    double? price,
-  }) async {
-    final response = await http.post(
-      Uri.parse("$baseUrl/products"),
+    final http.Response response = await http.put(
+      Uri.parse('$baseUrl/products/$productId'),
       headers: await _headers(auth: true),
       body: jsonEncode({
-        "name": name,
-        "description": description,
-        "price": price,
+        'name': name,
+        'description': description,
+        'price': price,
+        'image_url': imageUrl,
+        'category_id': categoryId,
+        'in_stock': inStock,
+        'care': care,
       }),
     );
 
     if (response.statusCode != 200) {
-      throw Exception("Ошибка создания товара");
+      throw Exception('Ошибка обновления товара: ${response.body}');
     }
   }
 
   static Future<void> deleteProduct(int productId) async {
-    final response = await http.delete(
-      Uri.parse("${AppConfig.baseUrl}/products/$productId"),
+    final http.Response response = await http.delete(
+      Uri.parse('$baseUrl/products/$productId'),
       headers: await _headers(auth: true),
     );
 
     if (response.statusCode != 200) {
-      throw Exception("Ошибка удаления товара");
+      throw Exception('Ошибка удаления товара: ${response.body}');
     }
   }
 
-  static Future<List<Map<String, dynamic>>> getCategories() async {
-    final response = await http.get(
-      Uri.parse("${AppConfig.baseUrl}/categories"),
+  static Future<List<Map<String, dynamic>>> getPriceHistory(int productId) async {
+    final http.Response response = await http.get(
+      Uri.parse('$baseUrl/products/$productId/price-history'),
+      headers: await _headers(),
     );
 
     if (response.statusCode == 200) {
-      final List data = jsonDecode(response.body);
-      return data.map((e) => Map<String, dynamic>.from(e)).toList();
+      return _decodeList(response);
     }
 
-    throw Exception("Ошибка загрузки категорий");
+    throw Exception('Ошибка загрузки истории цен: ${response.body}');
+  }
+
+  static Future<List<Map<String, dynamic>>> getAdminOrders() async {
+    final http.Response response = await http.get(
+      Uri.parse('$baseUrl/admin/orders'),
+      headers: await _headers(auth: true),
+    );
+
+    if (response.statusCode == 200) {
+      return _decodeList(response);
+    }
+
+    throw Exception('Ошибка загрузки заказов: ${response.body}');
+  }
+
+  static Future<void> updateAdminOrderStatus({
+    required int orderId,
+    required String status,
+  }) async {
+    final http.Response response = await http.put(
+      Uri.parse('$baseUrl/admin/orders/$orderId/status'),
+      headers: await _headers(auth: true),
+      body: jsonEncode({
+        'status': status,
+      }),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception('Ошибка обновления статуса: ${response.body}');
+    }
   }
 }

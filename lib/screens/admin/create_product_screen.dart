@@ -15,17 +15,31 @@ class _CreateProductScreenState extends State<CreateProductScreen> {
   final descriptionController = TextEditingController();
 
   Future<void> createProduct() async {
+    final double? price =
+    double.tryParse(priceController.text.replaceAll(',', '.'));
+
+    if (price == null) {
+      Get.snackbar(
+        'Ошибка',
+        'Введите корректную цену',
+      );
+      return;
+    }
+
     try {
       await ServerApiService.createProduct(
-        name: nameController.text,
-        description: descriptionController.text,
-        price: double.tryParse(priceController.text),
+        name: nameController.text.trim(),
+        description: descriptionController.text.trim(),
+        price: price,
       );
 
       Get.snackbar('Успех', 'Товар создан');
-      Get.back(result: true); // важно!
+      Get.back(result: true);
     } catch (e) {
-      Get.snackbar('Ошибка', e.toString());
+      Get.snackbar(
+        'Ошибка',
+        e.toString(),
+      );
     }
   }
 
