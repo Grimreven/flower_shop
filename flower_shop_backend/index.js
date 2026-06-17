@@ -1583,6 +1583,39 @@ app.put("/orders/:id/status", authenticateToken, async (req, res) => {
   }
 });
 
+app.get("/admin/stats", authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const productsResult = await pool.query(
+      "SELECT COUNT(*)::int AS count FROM products"
+    );
+
+    const ordersResult = await pool.query(
+      "SELECT COUNT(*)::int AS count FROM orders"
+    );
+
+    const customersResult = await pool.query(
+      "SELECT COUNT(*)::int AS count FROM customers"
+    );
+
+    const revenueResult = await pool.query(
+      "SELECT COALESCE(SUM(total), 0)::numeric(10,2) AS total FROM orders"
+    );
+
+    res.json({
+      products_count: productsResult.rows[0].count,
+      orders_count: ordersResult.rows[0].count,
+      customers_count: customersResult.rows[0].count,
+      revenue: revenueResult.rows[0].total,
+    });
+  } catch (err) {
+    console.error("Ошибка GET /admin/stats:", err);
+    res.status(500).json({
+      message: "Ошибка загрузки статистики",
+      error: err.message,
+    });
+  }
+});
+
 app.get("/admin/orders", authenticateToken, requireAdmin, async (req, res) => {
   try {
     const result = await pool.query(

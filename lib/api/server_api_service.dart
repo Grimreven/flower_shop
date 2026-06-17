@@ -550,4 +550,19 @@ class ServerApiService {
       throw Exception('Ошибка обновления статуса: ${response.body}');
     }
   }
+
+  static Future<Map<String, dynamic>> getAdminStats() async {
+    final http.Response response = await http.get(
+      Uri.parse('$baseUrl/admin/stats'),
+      headers: await _headers(auth: true),
+    );
+
+    final Map<String, dynamic> data = _decodeMap(response);
+
+    if (response.statusCode == 200) {
+      return data;
+    }
+
+    throw Exception(data['message'] ?? 'Ошибка загрузки статистики');
+  }
 }
