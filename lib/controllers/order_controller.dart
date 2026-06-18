@@ -10,17 +10,19 @@ import '../controllers/settings_controller.dart';
 import '../helpers/order_tracking_helper.dart';
 import '../models/cart_item.dart' as model;
 import '../models/checkout_summary.dart';
-import '../models/order_model.dart';
 import '../models/delivery_method.dart';
+import '../models/order_model.dart';
 
 class OrderController extends GetxController {
   final AuthController authController;
+
   late OrderService _orderService;
 
   final RxList<OrderModel> orders = <OrderModel>[].obs;
   final RxMap<int, int> trackingStepByOrderId = <int, int>{}.obs;
   final RxMap<int, DateTime> trackingEtaByOrderId = <int, DateTime>{}.obs;
   final Rxn<OrderModel> lastCreatedOrder = Rxn<OrderModel>();
+
   final Map<int, Timer> _trackingTimers = <int, Timer>{};
 
   OrderController({
@@ -52,6 +54,7 @@ class OrderController extends GetxController {
         required String cardMask,
         required String deliveryAddress,
         required String recipientComment,
+        String paymentProvider = '',
         int? addressId,
         String? recipientName,
         String? recipientPhone,
@@ -65,16 +68,20 @@ class OrderController extends GetxController {
     }
 
     try {
-      final List<Map<String, dynamic>> itemsMaps = items.map((model.CartItem e) {
-        final Map<String, dynamic> json = e.toJson();
+      final List<Map<String, dynamic>> itemsMaps = items.map(
+            (model.CartItem e) {
+          final Map<String, dynamic> json = e.toJson();
 
-        return {
-          ...json,
-          'product_id': e.product.id,
-          'productId': e.product.id,
-          'quantity': e.quantity,
-        };
-      }).toList();
+          return {
+            ...json,
+            'product_id': e.product.id,
+            'productId': e.product.id,
+            'quantity': e.quantity,
+          };
+        },
+      ).toList();
+
+      final String provider = paymentProvider.trim();
 
       await _orderService.createOrder(
         itemsMaps: itemsMaps,
@@ -92,17 +99,16 @@ class OrderController extends GetxController {
           'fullAddress': deliveryAddress,
           'delivery_address': deliveryAddress,
           'deliveryAddress': deliveryAddress,
-          'recipient_name':
-          recipientName ?? authController.user.value?.name ?? '',
-          'recipientName':
-          recipientName ?? authController.user.value?.name ?? '',
+          'recipient_name': recipientName ?? authController.user.value?.name ?? '',
+          'recipientName': recipientName ?? authController.user.value?.name ?? '',
           'phone': recipientPhone ?? authController.user.value?.phone ?? '',
           'recipient_comment': recipientComment,
           'recipientComment': recipientComment,
           'comment': recipientComment,
           'promo_code': promoCode,
           'promoCode': promoCode,
-          'delivery_method': summary.deliveryMethod == DeliveryMethod.pickup
+          'delivery_method':
+          summary.deliveryMethod == DeliveryMethod.pickup
               ? 'pickup'
               : 'delivery',
           'delivery_price': summary.deliveryCost,
@@ -112,7 +118,9 @@ class OrderController extends GetxController {
           'delivery_time_to': deliveryTimeTo,
           'payment_amount': summary.payableTotal,
           'paymentAmount': summary.payableTotal,
-          'provider': 'demo',
+          'provider': provider.isEmpty ? 'demo' : provider,
+          'payment_provider': provider.isEmpty ? 'demo' : provider,
+          'paymentProvider': provider.isEmpty ? 'demo' : provider,
         },
       );
 
@@ -180,10 +188,10 @@ class OrderController extends GetxController {
     final List<OrderModel> userOrders = orders.cast<OrderModel>().toList();
 
     userOrders.sort((a, b) {
-      final DateTime dateA =
-          DateTime.tryParse(a.createdAt) ?? DateTime.fromMillisecondsSinceEpoch(0);
-      final DateTime dateB =
-          DateTime.tryParse(b.createdAt) ?? DateTime.fromMillisecondsSinceEpoch(0);
+      final DateTime dateA = DateTime.tryParse(a.createdAt) ??
+          DateTime.fromMillisecondsSinceEpoch(0);
+      final DateTime dateB = DateTime.tryParse(b.createdAt) ??
+          DateTime.fromMillisecondsSinceEpoch(0);
 
       final int dateCompare = dateA.compareTo(dateB);
 
@@ -220,7 +228,6 @@ class OrderController extends GetxController {
 
     final OrderTrackingStage initialStage =
     OrderTrackingHelper.resolveInitialStage(order.status);
-
     final int initialIndex = OrderTrackingHelper.stageToIndex(initialStage);
 
     trackingStepByOrderId[order.id] = initialIndex;
@@ -328,7 +335,10 @@ class OrderController extends GetxController {
     );
   }
 
-  Future<void> _notifyAboutStatusChange(int orderId, int stepIndex) async {
+  Future<void> _notifyAboutStatusChange(
+      int orderId,
+      int stepIndex,
+      ) async {
     final bool notificationsEnabled =
         _settingsController.orderNotifications.value ||
             _settingsController.promoNotifications.value ||
@@ -338,7 +348,8 @@ class OrderController extends GetxController {
       return;
     }
 
-    final String title = 'Статус ${getUserOrderTitle(orderId).toLowerCase()} обновлён';
+    final String title =
+        'Статус ${getUserOrderTitle(orderId).toLowerCase()} обновлён';
     final String body = OrderTrackingHelper.messageByIndex(stepIndex);
 
     await NotificationService.instance.showOrderStatusNotification(
