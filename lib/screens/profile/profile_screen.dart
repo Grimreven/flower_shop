@@ -186,6 +186,59 @@ class _ProfileScreenState extends State<ProfileScreen> {
     });
   }
 
+  Widget _dialogActions({
+    required String confirmText,
+    required VoidCallback onCancel,
+    required VoidCallback onConfirm,
+  }) {
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Row(
+      children: [
+        Expanded(
+          child: OutlinedButton(
+            onPressed: onCancel,
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size.fromHeight(48),
+              foregroundColor: isDark ? AppColors.purpleLight : AppColors.primary,
+              side: BorderSide(
+                color: isDark ? AppColors.darkBorder : AppColors.border,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+            ),
+            child: const Text('Отмена'),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: isDark
+                  ? AppColors.darkBrandGradient
+                  : AppColors.brandGradient,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: ElevatedButton(
+              onPressed: onConfirm,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.transparent,
+                shadowColor: Colors.transparent,
+                foregroundColor: Colors.white,
+                minimumSize: const Size.fromHeight(48),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+              ),
+              child: Text(confirmText),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   Future<void> _logout() async {
     final bool? confirmed = await showDialog<bool>(
       context: context,
@@ -193,14 +246,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
         return AlertDialog(
           title: const Text('Выход из аккаунта'),
           content: const Text('Вы уверены, что хотите выйти?'),
+          actionsPadding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
           actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Отмена'),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Выйти'),
+            _dialogActions(
+              confirmText: 'Выйти',
+              onCancel: () => Navigator.of(context).pop(false),
+              onConfirm: () => Navigator.of(context).pop(true),
             ),
           ],
         );
@@ -227,14 +278,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
           content: const Text(
             'Это очистит текущую демо-сессию и вернёт приложение к начальному состоянию.',
           ),
+          actionsPadding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
           actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Отмена'),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Сбросить'),
+            _dialogActions(
+              confirmText: 'Сбросить',
+              onCancel: () => Navigator.of(context).pop(false),
+              onConfirm: () => Navigator.of(context).pop(true),
             ),
           ],
         );
@@ -387,8 +436,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
           duration: const Duration(milliseconds: 220),
           padding: const EdgeInsets.symmetric(vertical: 12),
           decoration: BoxDecoration(
-            gradient:
-            selected ? (isDark ? AppColors.darkBrandGradient : AppColors.brandGradient) : null,
+            gradient: selected
+                ? (isDark ? AppColors.darkBrandGradient : AppColors.brandGradient)
+                : null,
             borderRadius: BorderRadius.circular(18),
             boxShadow: selected
                 ? [
@@ -597,8 +647,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     Expanded(
                       child: DecoratedBox(
                         decoration: BoxDecoration(
-                          gradient: Theme.of(context).brightness ==
-                              Brightness.dark
+                          gradient:
+                          Theme.of(context).brightness == Brightness.dark
                               ? AppColors.darkBrandGradient
                               : AppColors.brandGradient,
                           borderRadius: BorderRadius.circular(18),
@@ -671,8 +721,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
       nextLevelLabel = 'Silver';
     }
 
-    final int points =
-    user.loyaltyPoints > 0 ? user.loyaltyPoints : totalSpent.round();
+    final int points = user.loyaltyPoints > 0
+        ? user.loyaltyPoints
+        : totalSpent.round();
 
     return _card(
       child: Column(
@@ -810,8 +861,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
             width: 46,
             height: 46,
             decoration: BoxDecoration(
-              gradient:
-              isDark ? AppColors.darkBrandGradient : AppColors.brandGradient,
+              gradient: isDark
+                  ? AppColors.darkBrandGradient
+                  : AppColors.brandGradient,
               borderRadius: BorderRadius.circular(14),
             ),
             child: Icon(
@@ -846,8 +898,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   Text(
                     'По умолчанию',
                     style: TextStyle(
-                      color:
-                      isDark ? AppColors.purpleLight : AppColors.primary,
+                      color: isDark ? AppColors.purpleLight : AppColors.primary,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
@@ -998,8 +1049,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   width: double.infinity,
                   child: DecoratedBox(
                     decoration: BoxDecoration(
-                      gradient:
-                      Theme.of(context).brightness == Brightness.dark
+                      gradient: Theme.of(context).brightness == Brightness.dark
                           ? AppColors.darkBrandGradient
                           : AppColors.brandGradient,
                       borderRadius: BorderRadius.circular(18),
@@ -1145,7 +1195,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               AnimatedSwitcher(
                 duration: const Duration(milliseconds: 240),
                 child: KeyedSubtree(
-                  key: ValueKey<String>(activeSection),
+                  key: ValueKey(activeSection),
                   child: _activeSection(),
                 ),
               ),

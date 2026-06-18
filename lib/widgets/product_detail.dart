@@ -7,6 +7,7 @@ import '../controllers/auth_controller.dart';
 import '../controllers/cart_controller.dart';
 import '../models/product.dart';
 import '../utils/app_colors.dart';
+import 'app_auth_required_dialog.dart';
 
 class ProductDetail extends StatefulWidget {
   final Product product;
@@ -39,14 +40,18 @@ class _ProductDetailState extends State<ProductDetail> {
       final List<Map<String, dynamic>> data =
       await ServerApiService.getPriceHistory(widget.product.id);
 
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       setState(() {
         priceHistory = data;
         isLoadingPriceHistory = false;
       });
     } catch (_) {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       setState(() {
         priceHistory = [];
@@ -56,48 +61,25 @@ class _ProductDetailState extends State<ProductDetail> {
   }
 
   Future<void> _handleAddToCart(BuildContext context) async {
-    final bool isLoggedIn = widget.authController.isLoggedIn ||
-        widget.authController.token.isNotEmpty;
+    final bool isLoggedIn =
+        widget.authController.isLoggedIn || widget.authController.token.isNotEmpty;
 
     if (!isLoggedIn) {
-      final bool isDark = Theme.of(context).brightness == Brightness.dark;
-
-      await showDialog(
-        context: context,
-        builder: (BuildContext context) {
-          return AlertDialog(
-            backgroundColor: isDark ? AppColors.darkSurface : Colors.white,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(22),
-              side: BorderSide(
-                color: isDark ? AppColors.darkBorder : AppColors.border,
-              ),
-            ),
-            title: const Text('Требуется авторизация'),
-            content: const Text(
-              'Чтобы добавить товар в корзину, пожалуйста, войдите в аккаунт.',
-            ),
-            actions: <Widget>[
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: Text(
-                  'Понятно',
-                  style: TextStyle(
-                    color: isDark ? AppColors.purpleLight : AppColors.primary,
-                  ),
-                ),
-              ),
-            ],
-          );
-        },
+      await AppAuthRequiredDialog.show(
+        context,
+        title: 'Требуется вход',
+        message:
+        'Чтобы добавить товар в корзину, пожалуйста, авторизуйтесь или зарегистрируйтесь.',
+        confirmText: 'Войти',
       );
-
       return;
     }
 
     await widget.cartController.addToCart(widget.product);
 
-    if (!mounted) return;
+    if (!mounted) {
+      return;
+    }
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -111,7 +93,7 @@ class _ProductDetailState extends State<ProductDetail> {
     final bool hasHalfStar = (rating - fullStars) >= 0.5;
 
     return Row(
-      children: <Widget>[
+      children: [
         ...List.generate(
           fullStars,
               (_) => Icon(
@@ -131,13 +113,22 @@ class _ProductDetailState extends State<ProductDetail> {
   }
 
   double _toDouble(dynamic value) {
-    if (value == null) return 0;
-    if (value is num) return value.toDouble();
+    if (value == null) {
+      return 0;
+    }
+
+    if (value is num) {
+      return value.toDouble();
+    }
+
     return double.tryParse(value.toString()) ?? 0;
   }
 
   DateTime? _toDate(dynamic value) {
-    if (value == null) return null;
+    if (value == null) {
+      return null;
+    }
+
     return DateTime.tryParse(value.toString());
   }
 
@@ -160,7 +151,7 @@ class _ProductDetailState extends State<ProductDetail> {
         item['price'] ?? item['new_price'] ?? item['newPrice'],
       );
 
-      return <String, dynamic>{
+      return {
         ...item,
         'price': price,
       };
@@ -204,11 +195,10 @@ class _ProductDetailState extends State<ProductDetail> {
         border: Border.all(
           color: isDark ? AppColors.darkBorder : AppColors.border,
         ),
-        boxShadow: <BoxShadow>[
+        boxShadow: [
           BoxShadow(
-            color: isDark
-                ? AppColors.purple.withValues(alpha: 0.05)
-                : AppColors.shadow,
+            color:
+            isDark ? AppColors.purple.withValues(alpha: 0.05) : AppColors.shadow,
             blurRadius: 18,
             offset: const Offset(0, 8),
           ),
@@ -242,7 +232,7 @@ class _ProductDetailState extends State<ProductDetail> {
           ),
         ),
         child: Column(
-          children: <Widget>[
+          children: [
             Icon(
               icon,
               color: isDark ? AppColors.purpleLight : AppColors.primary,
@@ -297,9 +287,9 @@ class _ProductDetailState extends State<ProductDetail> {
         context: context,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
+          children: [
             Row(
-              children: <Widget>[
+              children: [
                 Icon(
                   Icons.show_chart_rounded,
                   color: primary,
@@ -317,7 +307,8 @@ class _ProductDetailState extends State<ProductDetail> {
             ),
             const SizedBox(height: 14),
             Text(
-              'История изменения цены пока отсутствует. Она появится после изменения стоимости товара в админ-панели.',
+              'История изменения цены пока отсутствует.\n'
+                  'Она появится после изменения стоимости товара в админ-панели.',
               style: TextStyle(
                 color: muted,
                 height: 1.45,
@@ -346,13 +337,13 @@ class _ProductDetailState extends State<ProductDetail> {
     final double maxPrice = prices.reduce((a, b) => a > b ? a : b);
     final double diff = (maxPrice - minPrice).abs();
     final double padding = diff == 0 ? maxPrice * 0.08 : diff * 0.25;
-
     final double minY = (minPrice - padding).clamp(0, double.infinity);
     final double maxY = maxPrice + padding;
 
     final double firstPrice = prices.first;
     final double lastPrice = prices.last;
     final double change = lastPrice - firstPrice;
+
     final bool isIncrease = change > 0;
     final bool isDecrease = change < 0;
 
@@ -371,9 +362,9 @@ class _ProductDetailState extends State<ProductDetail> {
       padding: const EdgeInsets.fromLTRB(18, 18, 18, 14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
+        children: [
           Row(
-            children: <Widget>[
+            children: [
               Container(
                 width: 42,
                 height: 42,
@@ -391,7 +382,7 @@ class _ProductDetailState extends State<ProductDetail> {
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
+                  children: [
                     Text(
                       'Динамика цены',
                       style: TextStyle(
@@ -516,7 +507,7 @@ class _ProductDetailState extends State<ProductDetail> {
                     ),
                   ),
                 ),
-                lineBarsData: <LineChartBarData>[
+                lineBarsData: [
                   LineChartBarData(
                     spots: spots,
                     isCurved: true,
@@ -535,15 +526,14 @@ class _ProductDetailState extends State<ProductDetail> {
                           radius: 4,
                           color: primary,
                           strokeWidth: 3,
-                          strokeColor:
-                          isDark ? AppColors.darkSurface : Colors.white,
+                          strokeColor: isDark ? AppColors.darkSurface : Colors.white,
                         );
                       },
                     ),
                     belowBarData: BarAreaData(
                       show: true,
                       gradient: LinearGradient(
-                        colors: <Color>[
+                        colors: [
                           primary.withValues(alpha: 0.22),
                           primary.withValues(alpha: 0.02),
                         ],
@@ -590,7 +580,7 @@ class _ProductDetailState extends State<ProductDetail> {
               return Padding(
                 padding: const EdgeInsets.only(bottom: 8),
                 child: Row(
-                  children: <Widget>[
+                  children: [
                     Icon(
                       Icons.history_rounded,
                       size: 18,
@@ -606,7 +596,7 @@ class _ProductDetailState extends State<ProductDetail> {
                         ),
                       ),
                     ),
-                    if (oldPrice > 0) ...<Widget>[
+                    if (oldPrice > 0) ...[
                       Text(
                         '${oldPrice.toStringAsFixed(0)} ₽',
                         style: TextStyle(
@@ -650,7 +640,7 @@ class _ProductDetailState extends State<ProductDetail> {
         ),
       ),
       child: Row(
-        children: <Widget>[
+        children: [
           Icon(
             widget.product.inStock
                 ? Icons.check_circle_rounded
@@ -681,7 +671,7 @@ class _ProductDetailState extends State<ProductDetail> {
       decoration: BoxDecoration(
         gradient: isDark ? AppColors.darkBrandGradient : AppColors.brandGradient,
         borderRadius: BorderRadius.circular(18),
-        boxShadow: <BoxShadow>[
+        boxShadow: [
           BoxShadow(
             color: (isDark ? AppColors.purple : AppColors.primary)
                 .withValues(alpha: 0.18),
@@ -691,9 +681,7 @@ class _ProductDetailState extends State<ProductDetail> {
         ],
       ),
       child: ElevatedButton.icon(
-        onPressed: widget.product.inStock
-            ? () => _handleAddToCart(context)
-            : null,
+        onPressed: widget.product.inStock ? () => _handleAddToCart(context) : null,
         icon: const Icon(Icons.shopping_bag_outlined),
         label: const Text('Добавить в корзину'),
         style: ElevatedButton.styleFrom(
@@ -722,7 +710,7 @@ class _ProductDetailState extends State<ProductDetail> {
     return Scaffold(
       backgroundColor: bg,
       body: CustomScrollView(
-        slivers: <Widget>[
+        slivers: [
           SliverAppBar(
             expandedHeight: 380,
             pinned: true,
@@ -751,7 +739,7 @@ class _ProductDetailState extends State<ProductDetail> {
             flexibleSpace: FlexibleSpaceBar(
               background: Stack(
                 fit: StackFit.expand,
-                children: <Widget>[
+                children: [
                   Hero(
                     tag: 'product_${widget.product.id}',
                     child: Image.network(
@@ -764,8 +752,7 @@ class _ProductDetailState extends State<ProductDetail> {
                         child: Icon(
                           Icons.local_florist_rounded,
                           size: 72,
-                          color:
-                          isDark ? AppColors.purpleLight : AppColors.primary,
+                          color: isDark ? AppColors.purpleLight : AppColors.primary,
                         ),
                       ),
                     ),
@@ -773,7 +760,7 @@ class _ProductDetailState extends State<ProductDetail> {
                   DecoratedBox(
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
-                        colors: <Color>[
+                        colors: [
                           Colors.black.withValues(alpha: 0.05),
                           Colors.black.withValues(alpha: 0.25),
                           Colors.black.withValues(alpha: 0.65),
@@ -789,7 +776,7 @@ class _ProductDetailState extends State<ProductDetail> {
                     bottom: 34,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
-                      children: <Widget>[
+                      children: [
                         if (widget.product.categoryName.isNotEmpty)
                           Container(
                             padding: const EdgeInsets.symmetric(
@@ -843,13 +830,13 @@ class _ProductDetailState extends State<ProductDetail> {
                 padding: const EdgeInsets.fromLTRB(18, 20, 18, 28),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
+                  children: [
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.center,
-                      children: <Widget>[
+                      children: [
                         Expanded(
                           child: Row(
-                            children: <Widget>[
+                            children: [
                               _ratingStars(widget.product.rating, isDark),
                               const SizedBox(width: 10),
                               Text(
@@ -859,7 +846,7 @@ class _ProductDetailState extends State<ProductDetail> {
                                   fontWeight: FontWeight.w700,
                                 ),
                               ),
-                              if (widget.product.reviewCount > 0) ...<Widget>[
+                              if (widget.product.reviewCount > 0) ...[
                                 const SizedBox(width: 8),
                                 Text(
                                   '(${widget.product.reviewCount})',
@@ -891,7 +878,7 @@ class _ProductDetailState extends State<ProductDetail> {
                     ),
                     const SizedBox(height: 18),
                     Row(
-                      children: <Widget>[
+                      children: [
                         _infoPill(
                           context: context,
                           icon: Icons.local_florist_rounded,
@@ -919,7 +906,7 @@ class _ProductDetailState extends State<ProductDetail> {
                       context: context,
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
-                        children: <Widget>[
+                        children: [
                           Text(
                             'Описание',
                             style: TextStyle(
