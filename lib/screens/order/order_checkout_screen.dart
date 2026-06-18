@@ -113,39 +113,113 @@ class _OrderCheckoutScreenState extends State<OrderCheckoutScreen> {
 
   bool get _canCheckout => _cartItems.isNotEmpty;
 
+  void _showCheckoutWarning(String message) {
+    if (!mounted) return;
+
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+
+    ScaffoldMessenger.of(context)
+      ..clearSnackBars()
+      ..showSnackBar(
+        SnackBar(
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          duration: const Duration(seconds: 3),
+          backgroundColor:
+          isDark ? AppColors.darkSurfaceElevated : Colors.white,
+          elevation: 8,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+            side: BorderSide(
+              color: isDark ? AppColors.darkBorder : AppColors.border,
+            ),
+          ),
+          content: Row(
+            children: [
+              Icon(
+                Icons.error_outline_rounded,
+                color: isDark ? AppColors.purpleLight : AppColors.primary,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  message,
+                  style: TextStyle(
+                    color: isDark
+                        ? AppColors.darkForeground
+                        : AppColors.foreground,
+                    fontWeight: FontWeight.w600,
+                    height: 1.25,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+  }
+
   Future<void> _confirmOrder() async {
+    if (_isLoadingAddresses || _isLoadingPayments) {
+      _showCheckoutWarning('Данные заказа ещё загружаются. Подождите немного.');
+      return;
+    }
+
     if (!_canCheckout) {
-      Get.snackbar('Ошибка', 'Корзина пуста');
+      _showCheckoutWarning('Корзина пуста. Добавьте товары перед оформлением заказа.');
       return;
     }
 
     if (!authController.isLoggedIn) {
-      Get.snackbar(
-        'Вход',
-        'Пожалуйста, войдите в аккаунт для оформления заказа',
-      );
+      _showCheckoutWarning('Для оформления заказа необходимо войти в аккаунт.');
       return;
     }
 
     final UserAddress? selectedAddress = _localSelectedAddress;
     final PaymentMethodModel? selectedPayment = _localSelectedPayment;
 
+    if (deliveryMethod == DeliveryMethod.delivery) {
+      if (_localAddresses.isEmpty) {
+        _showCheckoutWarning(
+          'У вас нет сохранённых адресов. Добавьте адрес доставки.',
+        );
+        return;
+      }
+
+      if (selectedAddress == null) {
+        _showCheckoutWarning('Выберите адрес доставки.');
+        return;
+      }
+
+      if (selectedAddress.fullAddress.trim().isEmpty) {
+        _showCheckoutWarning(
+          'У выбранного адреса не заполнены данные доставки.',
+        );
+        return;
+      }
+    }
+
     if (selectedPayment == null) {
-      Get.snackbar('Ошибка', 'Выберите способ оплаты');
+      _showCheckoutWarning('Выберите способ оплаты.');
+      return;
+    }
+
+    final CheckoutSummary summary = _buildSummary();
+
+    if (bonusToUse > summary.allowedBonuses) {
+      setState(() {
+        bonusToUse = summary.allowedBonuses;
+      });
+
+      _showCheckoutWarning(
+        'Количество бонусов было скорректировано под сумму заказа.',
+      );
       return;
     }
 
     final String deliveryAddress = deliveryMethod == DeliveryMethod.pickup
         ? 'Самовывоз'
-        : (selectedAddress?.fullAddress.trim() ?? '');
-
-    if (deliveryMethod == DeliveryMethod.delivery &&
-        deliveryAddress.trim().isEmpty) {
-      Get.snackbar('Ошибка', 'Выберите адрес доставки');
-      return;
-    }
-
-    final CheckoutSummary summary = _buildSummary();
+        : selectedAddress!.fullAddress.trim();
 
     final String paymentMethod = selectedPayment.isCard
         ? 'card'
@@ -175,23 +249,19 @@ class _OrderCheckoutScreenState extends State<OrderCheckoutScreen> {
         paymentStatus: paymentStatus,
         cardMask: cardMask,
         deliveryAddress: deliveryAddress,
-        addressId:
-        deliveryMethod == DeliveryMethod.delivery ? selectedAddress?.id : null,
+        addressId: deliveryMethod == DeliveryMethod.delivery
+            ? selectedAddress?.id
+            : null,
         recipientName: authController.user.value?.name ?? '',
         recipientPhone:
-        authController.user.value?.phone ?? selectedAddress?.phone ?? '',
+        selectedAddress?.phone ?? authController.user.value?.phone ?? '',
         recipientComment: recipientCommentController.text.trim(),
         promoCode: promoController.text.trim(),
       );
 
       Get.offAll(() => const OrderSuccessScreen());
     } catch (e) {
-      Get.snackbar(
-        'Ошибка',
-        'Не удалось оформить заказ: $e',
-        backgroundColor: Colors.redAccent,
-        colorText: Colors.white,
-      );
+      _showCheckoutWarning('Не удалось оформить заказ: $e');
     }
   }
 

@@ -28,8 +28,10 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
   @override
   void initState() {
     super.initState();
+
     orderController = Get.find<OrderController>();
     paymentController = Get.find<PaymentController>();
+
     orderController.initializeTrackingForOrder(widget.order);
     paymentController.loadPaymentTransactions();
   }
@@ -62,7 +64,11 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
       return transaction.paymentMethodTitle!;
     }
 
-    return widget.order.paymentMethod;
+    if (widget.order.paymentMethod.trim().isNotEmpty) {
+      return widget.order.paymentMethod;
+    }
+
+    return 'Не указано';
   }
 
   String _paymentMethodDetails(PaymentTransactionModel? transaction) {
@@ -105,7 +111,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
         boxShadow: [
           BoxShadow(
             color: isDark
-                ? AppColors.purple.withOpacity(0.08)
+                ? AppColors.purple.withValues(alpha: 0.08)
                 : AppColors.shadow,
             blurRadius: 18,
             offset: const Offset(0, 8),
@@ -123,6 +129,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
 
     try {
       final DateTime date = DateTime.parse(raw).toLocal();
+
       final String day = date.day.toString().padLeft(2, '0');
       final String month = date.month.toString().padLeft(2, '0');
       final String year = date.year.toString();
@@ -135,11 +142,35 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
     }
   }
 
+  PaymentTransactionModel? _latestPaymentForOrder() {
+    try {
+      final List<PaymentTransactionModel> items = paymentController
+          .getPaymentsForOrderLocal(widget.order.id)
+          .whereType<PaymentTransactionModel>()
+          .toList()
+        ..sort(
+              (PaymentTransactionModel a, PaymentTransactionModel b) =>
+              b.createdAt.compareTo(a.createdAt),
+        );
+
+      if (items.isEmpty) {
+        return null;
+      }
+
+      return items.first;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  List<OrderItem> _orderItems() {
+    return widget.order.items.whereType<OrderItem>().toList();
+  }
+
   @override
   Widget build(BuildContext context) {
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
     final Color bg = Theme.of(context).scaffoldBackgroundColor;
-    final Color cardColor = Theme.of(context).cardColor;
     final Color onSurface = Theme.of(context).colorScheme.onSurface;
 
     return Scaffold(
@@ -150,7 +181,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
           icon: const Icon(Icons.arrow_back_rounded),
         ),
         title: Text(
-          'Заказ #${widget.order.id}',
+          orderController.getUserOrderTitle(widget.order.id),
           style: TextStyle(
             color: onSurface,
             fontWeight: FontWeight.w700,
@@ -180,37 +211,31 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
         child: Obx(() {
           final int currentStepIndex =
           orderController.getTrackingStepIndex(widget.order.id);
+
           final String currentStatusTitle =
           orderController.getTrackingStatusTitle(widget.order.id);
+
           final String currentStatusMessage =
           orderController.getTrackingStatusMessage(widget.order.id);
+
           final bool isDelivered =
           orderController.isOrderDelivered(widget.order.id);
+
           final String etaText = isDelivered
               ? 'Доставлен'
               : 'До ${orderController.getTrackingEtaText(widget.order.id)}';
 
-          PaymentTransactionModel? latestPayment;
-          try {
-            final List<PaymentTransactionModel> items =
-            paymentController.getPaymentsForOrderLocal(widget.order.id)
-              ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+          final PaymentTransactionModel? latestPayment =
+          _latestPaymentForOrder();
 
-            if (items.isNotEmpty) {
-              latestPayment = items.first;
-            }
-          } catch (_) {
-            latestPayment = null;
-          }
-
-          final List<OrderItem> orderItems =
-          widget.order.items.whereType<OrderItem>().toList();
+          final List<OrderItem> orderItems = _orderItems();
 
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
               _OrderTrackingHeroCard(
-                orderId: widget.order.id.toString(),
+                orderId:
+                orderController.getUserOrderNumber(widget.order.id).toString(),
                 currentStatusTitle: currentStatusTitle,
                 currentStatusMessage: currentStatusMessage,
                 etaText: etaText,
@@ -278,6 +303,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                       final bool isActive = index == currentStepIndex;
                       final bool isLast =
                           index == OrderTrackingHelper.steps.length - 1;
+
                       final step = OrderTrackingHelper.steps[index];
 
                       return _TimelineStepTile(
@@ -324,12 +350,26 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
               const SizedBox(height: 20),
               _sectionTitle(context, 'Состав заказа'),
               const SizedBox(height: 12),
-              ...orderItems.map(
-                    (OrderItem item) => Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: _OrderItemCard(item: item),
+              if (orderItems.isEmpty)
+                _cardWrapper(
+                  context,
+                  Text(
+                    'Состав заказа недоступен',
+                    style: TextStyle(
+                      color: isDark
+                          ? AppColors.darkMutedForeground
+                          : AppColors.mutedForeground,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                )
+              else
+                ...orderItems.map(
+                      (OrderItem item) => Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: _OrderItemCard(item: item),
+                  ),
                 ),
-              ),
               const SizedBox(height: 10),
               _cardWrapper(
                 context,
@@ -397,9 +437,8 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
               const SizedBox(height: 24),
               DecoratedBox(
                 decoration: BoxDecoration(
-                  gradient: isDark
-                      ? AppColors.darkBrandGradient
-                      : AppColors.brandGradient,
+                  gradient:
+                  isDark ? AppColors.darkBrandGradient : AppColors.brandGradient,
                   borderRadius: BorderRadius.circular(22),
                 ),
                 child: ElevatedButton.icon(
@@ -447,14 +486,12 @@ class _OrderTrackingHeroCard extends StatelessWidget {
       width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        gradient: isDark
-            ? AppColors.darkBrandGradient
-            : AppColors.brandGradient,
+        gradient: isDark ? AppColors.darkBrandGradient : AppColors.brandGradient,
         borderRadius: BorderRadius.circular(28),
         boxShadow: [
           BoxShadow(
             color: (isDark ? AppColors.purple : AppColors.primary)
-                .withOpacity(0.20),
+                .withValues(alpha: 0.20),
             blurRadius: 24,
             offset: const Offset(0, 12),
           ),
@@ -499,7 +536,7 @@ class _OrderTrackingHeroCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.16),
+              color: Colors.white.withValues(alpha: 0.16),
               borderRadius: BorderRadius.circular(999),
             ),
             child: Text(
@@ -651,8 +688,8 @@ class _TimelineStepTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
 
-    final Color activeColor =
-    isDark ? AppColors.purpleLight : AppColors.primary;
+    final Color activeColor = isDark ? AppColors.purpleLight : AppColors.primary;
+
     final Color lineColor = isCompleted || isActive
         ? activeColor
         : (isDark ? AppColors.darkBorder : AppColors.border);
@@ -760,9 +797,8 @@ class _OrderItemCard extends StatelessWidget {
             width: 54,
             height: 54,
             decoration: BoxDecoration(
-              color: isDark
-                  ? AppColors.darkSurfaceElevated
-                  : AppColors.primaryLight,
+              color:
+              isDark ? AppColors.darkSurfaceElevated : AppColors.primaryLight,
               borderRadius: BorderRadius.circular(16),
             ),
             child: item.imageUrl.trim().isNotEmpty
@@ -773,9 +809,7 @@ class _OrderItemCard extends StatelessWidget {
                 fit: BoxFit.cover,
                 errorBuilder: (_, __, ___) => Icon(
                   Icons.local_florist_rounded,
-                  color: isDark
-                      ? AppColors.purpleLight
-                      : AppColors.primary,
+                  color: isDark ? AppColors.purpleLight : AppColors.primary,
                 ),
               ),
             )
@@ -799,7 +833,7 @@ class _OrderItemCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  '${item.quantity} шт. • ${item.price.toStringAsFixed(0)} ₽',
+                  '${item.quantity} шт.\n• ${item.price.toStringAsFixed(0)} ₽',
                   style: TextStyle(
                     fontSize: 13,
                     color: isDark

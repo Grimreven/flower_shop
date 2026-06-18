@@ -176,6 +176,37 @@ class OrderController extends GetxController {
     return null;
   }
 
+  int getUserOrderNumber(int orderId) {
+    final List<OrderModel> userOrders = orders.cast<OrderModel>().toList();
+
+    userOrders.sort((a, b) {
+      final DateTime dateA =
+          DateTime.tryParse(a.createdAt) ?? DateTime.fromMillisecondsSinceEpoch(0);
+      final DateTime dateB =
+          DateTime.tryParse(b.createdAt) ?? DateTime.fromMillisecondsSinceEpoch(0);
+
+      final int dateCompare = dateA.compareTo(dateB);
+
+      if (dateCompare != 0) {
+        return dateCompare;
+      }
+
+      return a.id.compareTo(b.id);
+    });
+
+    final int index = userOrders.indexWhere((order) => order.id == orderId);
+
+    if (index == -1) {
+      return orderId;
+    }
+
+    return index + 1;
+  }
+
+  String getUserOrderTitle(int orderId) {
+    return 'Заказ #${getUserOrderNumber(orderId)}';
+  }
+
   void initializeTrackingForOrder(OrderModel order) {
     _ensureTrackingInitialized(order);
     _startTrackingIfNeeded(order);
@@ -307,7 +338,7 @@ class OrderController extends GetxController {
       return;
     }
 
-    final String title = 'Статус заказа #$orderId обновлён';
+    final String title = 'Статус ${getUserOrderTitle(orderId).toLowerCase()} обновлён';
     final String body = OrderTrackingHelper.messageByIndex(stepIndex);
 
     await NotificationService.instance.showOrderStatusNotification(

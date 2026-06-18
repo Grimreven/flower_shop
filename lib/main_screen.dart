@@ -2,13 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
 import 'controllers/auth_controller.dart';
-import 'screens/auth/auth_screen.dart';
 import 'screens/cart/cart_screen.dart';
 import 'screens/favorites/favorites_screen.dart';
 import 'screens/home/home_screen.dart';
 import 'screens/order/orders_screen.dart';
 import 'screens/profile/profile_screen.dart';
 import 'utils/app_colors.dart';
+import 'widgets/app_auth_required_dialog.dart';
 
 class MainScreen extends StatefulWidget {
   const MainScreen({super.key});
@@ -19,7 +19,9 @@ class MainScreen extends StatefulWidget {
 
 class _MainScreenState extends State<MainScreen> {
   late int _currentIndex;
+
   final AuthController authController = Get.find<AuthController>();
+
   late final List<Widget> _pages;
 
   @override
@@ -35,47 +37,28 @@ class _MainScreenState extends State<MainScreen> {
     ];
 
     final args = Get.arguments;
+
     _currentIndex =
     (args is Map && args['tabIndex'] is int) ? args['tabIndex'] as int : 0;
   }
 
   Future<void> _onTabTapped(int index) async {
-    final restrictedTabs = [1, 2, 3, 4];
+    final List<int> restrictedTabs = [1, 2, 3, 4];
 
     if (restrictedTabs.contains(index) && authController.token.isEmpty) {
-      _showAuthDialog();
+      await AppAuthRequiredDialog.show(context);
       return;
     }
 
-    setState(() => _currentIndex = index);
-  }
-
-  void _showAuthDialog() {
-    Get.defaultDialog(
-      title: "Требуется вход",
-      titleStyle: const TextStyle(
-        fontWeight: FontWeight.bold,
-        fontSize: 20,
-        color: AppColors.primary,
-      ),
-      middleText:
-      "Чтобы открыть этот раздел, пожалуйста, авторизуйтесь или зарегистрируйтесь.",
-      textConfirm: "Войти",
-      textCancel: "Отмена",
-      confirmTextColor: Colors.white,
-      buttonColor: AppColors.primary,
-      cancelTextColor: AppColors.mutedForeground,
-      radius: 20,
-      onConfirm: () {
-        Get.back();
-        Get.to(() => const AuthScreen());
-      },
-    );
+    setState(() {
+      _currentIndex = index;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
+
     final Color surface = Theme.of(context).colorScheme.surface;
     final Color borderColor = isDark ? AppColors.darkBorder : AppColors.border;
 
@@ -104,8 +87,9 @@ class _MainScreenState extends State<MainScreen> {
           currentIndex: _currentIndex,
           onTap: _onTabTapped,
           selectedItemColor: isDark ? AppColors.purple : AppColors.primary,
-          unselectedItemColor:
-          isDark ? AppColors.darkMutedForeground : AppColors.mutedForeground,
+          unselectedItemColor: isDark
+              ? AppColors.darkMutedForeground
+              : AppColors.mutedForeground,
           type: BottomNavigationBarType.fixed,
           backgroundColor: surface,
           elevation: 0,

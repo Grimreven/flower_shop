@@ -335,7 +335,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Заказ #${order.id}',
+                          orderController.getUserOrderTitle(order.id),
                           style: TextStyle(
                             fontWeight: FontWeight.w800,
                             color: onSurface,
