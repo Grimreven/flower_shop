@@ -20,7 +20,7 @@ class MainScreen extends StatefulWidget {
 class _MainScreenState extends State<MainScreen> {
   late int _currentIndex;
 
-  final AuthController authController = Get.find<AuthController>();
+  final AuthController authController = Get.find();
 
   late final List<Widget> _pages;
 
@@ -37,9 +37,9 @@ class _MainScreenState extends State<MainScreen> {
     ];
 
     final args = Get.arguments;
-
-    _currentIndex =
-    (args is Map && args['tabIndex'] is int) ? args['tabIndex'] as int : 0;
+    _currentIndex = (args is Map && args['tabIndex'] is int)
+        ? args['tabIndex'] as int
+        : 0;
   }
 
   Future<void> _onTabTapped(int index) async {
@@ -87,13 +87,14 @@ class _MainScreenState extends State<MainScreen> {
           currentIndex: _currentIndex,
           onTap: _onTabTapped,
           selectedItemColor: isDark ? AppColors.purple : AppColors.primary,
-          unselectedItemColor: isDark
-              ? AppColors.darkMutedForeground
-              : AppColors.mutedForeground,
+          unselectedItemColor:
+          isDark ? AppColors.darkMutedForeground : AppColors.mutedForeground,
           type: BottomNavigationBarType.fixed,
           backgroundColor: surface,
           elevation: 0,
-          selectedLabelStyle: const TextStyle(fontWeight: FontWeight.w600),
+          selectedLabelStyle: const TextStyle(
+            fontWeight: FontWeight.w600,
+          ),
           items: const [
             BottomNavigationBarItem(
               icon: Icon(Icons.home_rounded),

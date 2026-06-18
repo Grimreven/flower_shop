@@ -11,15 +11,13 @@ import 'screens/favorites/favorites_screen.dart';
 import 'screens/home/home_screen.dart';
 import 'screens/order/orders_screen.dart';
 import 'screens/profile/profile_screen.dart';
+import 'screens/splash_screen.dart';
 import 'utils/app_colors.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
   await GetStorage.init();
-
   AppBindings().dependencies();
-
   runApp(const FlowerShopApp());
 }
 
@@ -28,8 +26,7 @@ class FlowerShopApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final SettingsController settingsController =
-    Get.find<SettingsController>();
+    final SettingsController settingsController = Get.find();
 
     return Obx(
           () => GetMaterialApp(
@@ -40,8 +37,12 @@ class FlowerShopApp extends StatelessWidget {
         themeMode: settingsController.darkTheme.value
             ? ThemeMode.dark
             : ThemeMode.light,
-        initialRoute: '/main',
+        initialRoute: '/splash',
         getPages: [
+          GetPage(
+            name: '/splash',
+            page: () => const SplashScreen(),
+          ),
           GetPage(
             name: '/main',
             page: () => const MainScreen(),
@@ -102,6 +103,10 @@ class FlowerShopApp extends StatelessWidget {
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: AppColors.surface,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 14,
+          vertical: 14,
+        ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
           borderSide: const BorderSide(
@@ -169,6 +174,10 @@ class FlowerShopApp extends StatelessWidget {
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: AppColors.darkSurfaceElevated,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 14,
+          vertical: 14,
+        ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
           borderSide: const BorderSide(
