@@ -5,6 +5,7 @@ import 'package:get_storage/get_storage.dart';
 import 'bindings/app_bindings.dart';
 import 'controllers/settings_controller.dart';
 import 'main_screen.dart';
+import 'screens/admin/admin_panel_screen.dart';
 import 'screens/auth/auth_screen.dart';
 import 'screens/cart/cart_screen.dart';
 import 'screens/favorites/favorites_screen.dart';
@@ -48,8 +49,12 @@ class FlowerShopApp extends StatelessWidget {
             page: () => const MainScreen(),
           ),
           GetPage(
+            name: '/admin',
+            page: () => const AdminPanelScreen(),
+          ),
+          GetPage(
             name: '/auth',
-            page: () => AuthScreen(),
+            page: () => const AuthScreen(),
           ),
           GetPage(
             name: '/home',

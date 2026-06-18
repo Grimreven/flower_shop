@@ -2,10 +2,11 @@ import 'package:flutter/material.dart';
 
 import '../../api/server_api_service.dart';
 import '../../utils/app_colors.dart';
+import '../auth/auth_screen.dart';
 import 'admin_orders_screen.dart';
+import 'admin_users_screen.dart';
 import 'create_product_screen.dart';
 import 'edit_product_screen.dart';
-import '../auth/auth_screen.dart';
 
 class AdminPanelScreen extends StatefulWidget {
   const AdminPanelScreen({super.key});
@@ -15,9 +16,8 @@ class AdminPanelScreen extends StatefulWidget {
 }
 
 class _AdminPanelScreenState extends State<AdminPanelScreen> {
-  List<Map<String, dynamic>> products = [];
+  List<Map<String, dynamic>> products = <Map<String, dynamic>>[];
   Map<String, dynamic>? stats;
-
   bool isLoading = true;
 
   @override
@@ -28,10 +28,14 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
 
   Future<void> loadProducts() async {
     try {
-      final data = await ServerApiService.getProducts();
-      final statsData = await ServerApiService.getAdminStats();
+      final List<Map<String, dynamic>> data =
+      await ServerApiService.getProducts();
+      final Map<String, dynamic> statsData =
+      await ServerApiService.getAdminStats();
 
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       setState(() {
         products = data;
@@ -39,15 +43,15 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
         isLoading = false;
       });
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       setState(() {
         isLoading = false;
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Ошибка: $e')),
-      );
+      _showMessage('Ошибка: $e');
     }
   }
 
@@ -56,24 +60,22 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
       await ServerApiService.deleteProduct(id);
       await loadProducts();
 
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Товар удалён')),
-      );
+      _showMessage('Товар удалён');
     } catch (e) {
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Ошибка: $e')),
-      );
+      _showMessage('Ошибка: $e');
     }
   }
 
   Future<void> logout() async {
     await ServerApiService.logout();
 
-    if (!mounted) return;
+    if (!mounted) {
+      return;
+    }
 
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => const AuthScreen()),
@@ -84,6 +86,14 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
   Future<void> openOrders() async {
     await Navigator.of(context).push(
       MaterialPageRoute(builder: (_) => const AdminOrdersScreen()),
+    );
+
+    await loadProducts();
+  }
+
+  Future<void> openUsers() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const AdminUsersScreen()),
     );
 
     await loadProducts();
@@ -115,13 +125,14 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
     final bool? confirm = await showDialog<bool>(
       context: context,
       builder: (dialogContext) {
-        final bool isDark = Theme.of(dialogContext).brightness == Brightness.dark;
+        final bool isDark =
+            Theme.of(dialogContext).brightness == Brightness.dark;
 
         return AlertDialog(
           backgroundColor: isDark ? AppColors.darkSurface : Colors.white,
           title: const Text('Удалить товар?'),
           content: const Text(
-            'Товар будет скрыт из каталога. Это действие можно отменить через базу данных.',
+            'Товар будет скрыт из каталога.\nЭто действие можно отменить через базу данных.',
           ),
           actions: [
             TextButton(
@@ -142,13 +153,46 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
     );
 
     if (confirm == true) {
-      await deleteProduct(product['id']);
+      await deleteProduct(_toInt(product['id']));
     }
   }
 
+  void _showMessage(String message) {
+    if (!mounted) {
+      return;
+    }
+
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+  }
+
+  int _toInt(dynamic value) {
+    if (value == null) {
+      return 0;
+    }
+
+    if (value is int) {
+      return value;
+    }
+
+    return int.tryParse(value.toString()) ?? 0;
+  }
+
   double _toDouble(dynamic value) {
-    if (value == null) return 0;
-    if (value is num) return value.toDouble();
+    if (value == null) {
+      return 0;
+    }
+
+    if (value is num) {
+      return value.toDouble();
+    }
+
     return double.tryParse(value.toString()) ?? 0;
   }
 
@@ -160,11 +204,6 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
   Color _cardColor(BuildContext context) {
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
     return isDark ? AppColors.darkSurface : Colors.white;
-  }
-
-  Color _softCardColor(BuildContext context) {
-    final bool isDark = Theme.of(context).brightness == Brightness.dark;
-    return isDark ? AppColors.darkSurfaceElevated : Colors.white;
   }
 
   Color _borderColor(BuildContext context) {
@@ -257,13 +296,13 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
   }
 
   Widget _statsBlock(BuildContext context) {
-    final data = stats;
+    final Map<String, dynamic>? data = stats;
 
     if (data == null) {
       return const SizedBox.shrink();
     }
 
-    final revenue = _toDouble(data['revenue']);
+    final double revenue = _toDouble(data['revenue']);
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
 
     final Color pink = isDark ? AppColors.purpleLight : AppColors.primary;
@@ -319,43 +358,82 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
     );
   }
 
-  Widget _ordersButton(BuildContext context) {
+  Widget _adminActions(BuildContext context) {
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 6),
-      child: Container(
-        width: double.infinity,
-        height: 52,
-        decoration: BoxDecoration(
-          gradient: isDark ? AppColors.darkBrandGradient : AppColors.brandGradient,
-          borderRadius: BorderRadius.circular(17),
-          boxShadow: [
-            BoxShadow(
-              color: _accentColor(context).withOpacity(0.18),
-              blurRadius: 16,
-              offset: const Offset(0, 7),
-            ),
-          ],
-        ),
-        child: ElevatedButton.icon(
-          onPressed: openOrders,
-          icon: const Icon(Icons.receipt_long),
-          label: const Text(
-            'Заказы',
-            style: TextStyle(
-              fontWeight: FontWeight.w800,
+      child: Row(
+        children: [
+          Expanded(
+            child: Container(
+              height: 52,
+              decoration: BoxDecoration(
+                gradient:
+                isDark ? AppColors.darkBrandGradient : AppColors.brandGradient,
+                borderRadius: BorderRadius.circular(17),
+                boxShadow: [
+                  BoxShadow(
+                    color: _accentColor(context).withOpacity(0.18),
+                    blurRadius: 16,
+                    offset: const Offset(0, 7),
+                  ),
+                ],
+              ),
+              child: ElevatedButton.icon(
+                onPressed: openOrders,
+                icon: const Icon(Icons.receipt_long),
+                label: const Text(
+                  'Заказы',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.transparent,
+                  shadowColor: Colors.transparent,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(17),
+                  ),
+                ),
+              ),
             ),
           ),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.transparent,
-            shadowColor: Colors.transparent,
-            foregroundColor: Colors.white,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(17),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Container(
+              height: 52,
+              decoration: BoxDecoration(
+                color: _cardColor(context),
+                borderRadius: BorderRadius.circular(17),
+                border: Border.all(
+                  color: _borderColor(context),
+                ),
+              ),
+              child: OutlinedButton.icon(
+                onPressed: openUsers,
+                icon: Icon(
+                  Icons.people_alt_rounded,
+                  color: _accentColor(context),
+                ),
+                label: Text(
+                  'Пользователи',
+                  style: TextStyle(
+                    color: _accentColor(context),
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                style: OutlinedButton.styleFrom(
+                  side: BorderSide.none,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(17),
+                  ),
+                ),
+              ),
             ),
           ),
-        ),
+        ],
       ),
     );
   }
@@ -380,7 +458,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
             ClipRRect(
               borderRadius: BorderRadius.circular(14),
               child: Image.network(
-                product['image_url'] ?? '',
+                product['image_url']?.toString() ?? '',
                 width: 72,
                 height: 72,
                 fit: BoxFit.cover,
@@ -408,7 +486,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    product['name'] ?? '',
+                    product['name']?.toString() ?? '',
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
@@ -496,8 +574,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
         padding: const EdgeInsets.only(bottom: 90),
         itemCount: products.length,
         itemBuilder: (context, index) {
-          final product = products[index];
-
+          final Map<String, dynamic> product = products[index];
           return _productCard(context, product);
         },
       ),
@@ -552,7 +629,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
             : Column(
           children: [
             _statsBlock(context),
-            _ordersButton(context),
+            _adminActions(context),
             Padding(
               padding: const EdgeInsets.fromLTRB(14, 8, 14, 4),
               child: Row(

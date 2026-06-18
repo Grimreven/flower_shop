@@ -443,7 +443,7 @@ class ServerApiService {
     String? imageUrl,
     int? categoryId,
     bool inStock = true,
-    List? care,
+    List<dynamic>? care,
   }) async {
     final http.Response response = await http.post(
       Uri.parse('$baseUrl/products'),
@@ -476,7 +476,7 @@ class ServerApiService {
     String? imageUrl,
     int? categoryId,
     bool? inStock,
-    List? care,
+    List<dynamic>? care,
   }) async {
     final http.Response response = await http.put(
       Uri.parse('$baseUrl/products/$productId'),
@@ -508,7 +508,9 @@ class ServerApiService {
     }
   }
 
-  static Future<List<Map<String, dynamic>>> getPriceHistory(int productId) async {
+  static Future<List<Map<String, dynamic>>> getPriceHistory(
+      int productId,
+      ) async {
     final http.Response response = await http.get(
       Uri.parse('$baseUrl/products/$productId/price-history'),
       headers: await _headers(),
@@ -564,5 +566,67 @@ class ServerApiService {
     }
 
     throw Exception(data['message'] ?? 'Ошибка загрузки статистики');
+  }
+
+  static Future<List<Map<String, dynamic>>> getAdminUsers() async {
+    final http.Response response = await http.get(
+      Uri.parse('$baseUrl/admin/users'),
+      headers: await _headers(auth: true),
+    );
+
+    if (response.statusCode == 200) {
+      return _decodeList(response);
+    }
+
+    throw Exception('Ошибка загрузки пользователей: ${response.body}');
+  }
+
+  static Future<List<Map<String, dynamic>>> getAdminRoles() async {
+    final http.Response response = await http.get(
+      Uri.parse('$baseUrl/admin/roles'),
+      headers: await _headers(auth: true),
+    );
+
+    if (response.statusCode == 200) {
+      return _decodeList(response);
+    }
+
+    throw Exception('Ошибка загрузки ролей: ${response.body}');
+  }
+
+  static Future<Map<String, dynamic>> updateAdminUserRole({
+    required int userId,
+    required int roleId,
+  }) async {
+    final http.Response response = await http.put(
+      Uri.parse('$baseUrl/admin/users/$userId/role'),
+      headers: await _headers(auth: true),
+      body: jsonEncode({
+        'role_id': roleId,
+      }),
+    );
+
+    final Map<String, dynamic> data = _decodeMap(response);
+
+    if (response.statusCode == 200) {
+      return data;
+    }
+
+    throw Exception(data['message'] ?? 'Ошибка изменения роли');
+  }
+
+  static Future<Map<String, dynamic>> getAdminUserOrders(int userId) async {
+    final http.Response response = await http.get(
+      Uri.parse('$baseUrl/admin/users/$userId/orders'),
+      headers: await _headers(auth: true),
+    );
+
+    final Map<String, dynamic> data = _decodeMap(response);
+
+    if (response.statusCode == 200) {
+      return data;
+    }
+
+    throw Exception(data['message'] ?? 'Ошибка загрузки заказов пользователя');
   }
 }

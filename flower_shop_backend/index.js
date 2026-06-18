@@ -1705,6 +1705,234 @@ app.put("/admin/orders/:id/status", authenticateToken, requireAdmin, async (req,
   }
 });
 
+app.get("/admin/roles", authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `
+      SELECT id, name
+      FROM roles
+      ORDER BY id
+      `
+    );
+
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Ошибка GET /admin/roles:", err);
+    res.status(500).json({
+      message: "Ошибка загрузки ролей",
+      error: err.message,
+    });
+  }
+});
+
+app.get("/admin/users", authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `
+      SELECT
+        c.id,
+        c.name,
+        c.email,
+        c.phone,
+        c.role_id,
+        COALESCE(r.name, 'customer') AS role,
+        COALESCE(la.points, 0) AS loyalty_points,
+        COALESCE(la.total_spent, 0) AS loyalty_total_spent,
+        COUNT(o.id)::int AS orders_count,
+        COALESCE(SUM(o.total), 0) AS orders_total,
+        MAX(o.created_at) AS last_order_at
+      FROM customers c
+      LEFT JOIN roles r ON r.id = c.role_id
+      LEFT JOIN loyalty_accounts la ON la.user_id = c.id
+      LEFT JOIN orders o ON o.user_id = c.id
+      GROUP BY
+        c.id,
+        c.name,
+        c.email,
+        c.phone,
+        c.role_id,
+        r.name,
+        la.points,
+        la.total_spent
+      ORDER BY c.id DESC
+      `
+    );
+
+    res.json(result.rows);
+  } catch (err) {
+    console.error("Ошибка GET /admin/users:", err);
+    res.status(500).json({
+      message: "Ошибка загрузки пользователей",
+      error: err.message,
+    });
+  }
+});
+
+app.put("/admin/users/:id/role", authenticateToken, requireAdmin, async (req, res) => {
+  const userId = Number(req.params.id);
+  const roleId = Number(req.body.role_id);
+
+  if (!Number.isInteger(userId) || userId <= 0) {
+    return res.status(400).json({ message: "Некорректный пользователь" });
+  }
+
+  if (!Number.isInteger(roleId) || roleId <= 0) {
+    return res.status(400).json({ message: "Некорректная роль" });
+  }
+
+  try {
+    const roleResult = await pool.query(
+      "SELECT id, name FROM roles WHERE id = $1 LIMIT 1",
+      [roleId]
+    );
+
+    if (roleResult.rows.length === 0) {
+      return res.status(404).json({ message: "Роль не найдена" });
+    }
+
+    const selectedRole = roleResult.rows[0];
+
+    if (userId === req.user.id && selectedRole.name !== "admin") {
+      return res.status(400).json({
+        message: "Нельзя снять роль администратора с текущего аккаунта",
+      });
+    }
+
+    const result = await pool.query(
+      `
+      UPDATE customers
+      SET role_id = $1
+      WHERE id = $2
+      RETURNING id, name, email, phone, role_id
+      `,
+      [roleId, userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: "Пользователь не найден" });
+    }
+
+    res.json({
+      ...result.rows[0],
+      role: selectedRole.name,
+    });
+  } catch (err) {
+    console.error("Ошибка PUT /admin/users/:id/role:", err);
+    res.status(500).json({
+      message: "Ошибка изменения роли",
+      error: err.message,
+    });
+  }
+});
+
+app.get("/admin/users/:id/orders", authenticateToken, requireAdmin, async (req, res) => {
+  const userId = Number(req.params.id);
+
+  if (!Number.isInteger(userId) || userId <= 0) {
+    return res.status(400).json({ message: "Некорректный пользователь" });
+  }
+
+  try {
+    const userResult = await pool.query(
+      `
+      SELECT
+        c.id,
+        c.name,
+        c.email,
+        c.phone,
+        COALESCE(r.name, 'customer') AS role
+      FROM customers c
+      LEFT JOIN roles r ON r.id = c.role_id
+      WHERE c.id = $1
+      LIMIT 1
+      `,
+      [userId]
+    );
+
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ message: "Пользователь не найден" });
+    }
+
+    const ordersResult = await pool.query(
+      `
+      SELECT
+        o.id,
+        o.user_id,
+        o.status,
+        o.total,
+        o.items_total,
+        o.delivery_cost,
+        o.bonus_applied,
+        o.bonus_earned,
+        o.created_at,
+
+        odd.full_address,
+        odd.delivery_method,
+        odd.delivery_price,
+        odd.recipient_name,
+        odd.phone AS recipient_phone,
+        odd.comment AS delivery_comment,
+
+        opd.payment_method,
+        opd.payment_status,
+        opd.payment_amount,
+
+        COALESCE(
+          json_agg(
+            json_build_object(
+              'id', oi.id,
+              'product_id', oi.product_id,
+              'name', COALESCE(p.name, 'Товар'),
+              'quantity', oi.quantity,
+              'price', oi.price,
+              'image_url', COALESCE(p.image_url, '')
+            )
+          ) FILTER (WHERE oi.id IS NOT NULL),
+          '[]'
+        ) AS items
+      FROM orders o
+      LEFT JOIN order_items oi ON oi.order_id = o.id
+      LEFT JOIN products p ON p.id = oi.product_id
+      LEFT JOIN order_delivery_details odd ON odd.order_id = o.id
+      LEFT JOIN order_payment_details opd ON opd.order_id = o.id
+      WHERE o.user_id = $1
+      GROUP BY
+        o.id,
+        o.user_id,
+        o.status,
+        o.total,
+        o.items_total,
+        o.delivery_cost,
+        o.bonus_applied,
+        o.bonus_earned,
+        o.created_at,
+        odd.full_address,
+        odd.delivery_method,
+        odd.delivery_price,
+        odd.recipient_name,
+        odd.phone,
+        odd.comment,
+        opd.payment_method,
+        opd.payment_status,
+        opd.payment_amount
+      ORDER BY o.created_at DESC, o.id DESC
+      `,
+      [userId]
+    );
+
+    res.json({
+      user: userResult.rows[0],
+      orders: ordersResult.rows,
+    });
+  } catch (err) {
+    console.error("Ошибка GET /admin/users/:id/orders:", err);
+    res.status(500).json({
+      message: "Ошибка загрузки заказов пользователя",
+      error: err.message,
+    });
+  }
+});
+
 app.use((req, res) => {
   res.status(404).json({
     message: "Маршрут не найден",
