@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:get_storage/get_storage.dart';
 
+import 'api/local_demo_service.dart';
 import 'bindings/app_bindings.dart';
+import 'config/app_config.dart';
 import 'controllers/settings_controller.dart';
 import 'main_screen.dart';
 import 'screens/admin/admin_panel_screen.dart';
@@ -17,8 +19,17 @@ import 'utils/app_colors.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
   await GetStorage.init();
+
+  await AppConfig.init();
+
+  if (AppConfig.isDemoMode) {
+    await LocalDemoService.instance.ensureSeeded();
+  }
+
   AppBindings().dependencies();
+
   runApp(const FlowerShopApp());
 }
 
@@ -27,7 +38,7 @@ class FlowerShopApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final SettingsController settingsController = Get.find();
+    final SettingsController settingsController = Get.find<SettingsController>();
 
     return Obx(
           () => GetMaterialApp(

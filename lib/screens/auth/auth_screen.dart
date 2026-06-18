@@ -1,11 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+
 import 'package:flower_shop/controllers/auth_controller.dart';
 import 'package:flower_shop/main_screen.dart';
 
 import '../../utils/app_colors.dart';
+import '../../widgets/app_mode_switch_tile.dart';
 
-enum AuthTab { login, register }
+enum AuthTab {
+  login,
+  register,
+}
 
 class AuthScreen extends StatefulWidget {
   final AuthTab initialTab;
@@ -23,13 +28,17 @@ class _AuthScreenState extends State<AuthScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
-  final _loginEmailController = TextEditingController();
-  final _loginPasswordController = TextEditingController();
-  bool _loginLoading = false;
+  final TextEditingController _loginEmailController = TextEditingController();
+  final TextEditingController _loginPasswordController =
+  TextEditingController();
 
-  final _registerNameController = TextEditingController();
-  final _registerEmailController = TextEditingController();
-  final _registerPasswordController = TextEditingController();
+  final TextEditingController _registerNameController = TextEditingController();
+  final TextEditingController _registerEmailController =
+  TextEditingController();
+  final TextEditingController _registerPasswordController =
+  TextEditingController();
+
+  bool _loginLoading = false;
   bool _registerLoading = false;
 
   final AuthController _authController = Get.find<AuthController>();
@@ -37,7 +46,11 @@ class _AuthScreenState extends State<AuthScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+
+    _tabController = TabController(
+      length: 2,
+      vsync: this,
+    );
 
     if (widget.initialTab == AuthTab.register) {
       _tabController.index = 1;
@@ -47,35 +60,45 @@ class _AuthScreenState extends State<AuthScreen>
   @override
   void dispose() {
     _tabController.dispose();
+
     _loginEmailController.dispose();
     _loginPasswordController.dispose();
+
     _registerNameController.dispose();
     _registerEmailController.dispose();
     _registerPasswordController.dispose();
+
     super.dispose();
   }
 
   Future<void> _login() async {
-    if (_loginEmailController.text.isEmpty ||
-        _loginPasswordController.text.isEmpty) {
+    final String email = _loginEmailController.text.trim();
+    final String password = _loginPasswordController.text;
+
+    if (email.isEmpty || password.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Заполните все поля')),
+        const SnackBar(
+          content: Text('Заполните все поля'),
+        ),
       );
       return;
     }
 
-    setState(() => _loginLoading = true);
+    setState(() {
+      _loginLoading = true;
+    });
 
     try {
-      final success = await _authController.login(
-        _loginEmailController.text.trim(),
-        _loginPasswordController.text,
+      final bool success = await _authController.login(
+        email,
+        password,
       );
 
-      if (success) {
-        if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
-        // 🔥 ВОТ ГЛАВНОЕ
+      if (success) {
         if (_authController.isAdmin) {
           Get.offAllNamed('/admin');
         } else {
@@ -83,56 +106,87 @@ class _AuthScreenState extends State<AuthScreen>
         }
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Ошибка входа')),
+          const SnackBar(
+            content: Text('Ошибка входа'),
+          ),
         );
       }
     } catch (e) {
+      if (!mounted) {
+        return;
+      }
+
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Ошибка: $e')),
+        SnackBar(
+          content: Text('Ошибка: $e'),
+        ),
       );
     } finally {
       if (mounted) {
-        setState(() => _loginLoading = false);
+        setState(() {
+          _loginLoading = false;
+        });
       }
     }
   }
 
   Future<void> _register() async {
-    if (_registerNameController.text.isEmpty ||
-        _registerEmailController.text.isEmpty ||
-        _registerPasswordController.text.isEmpty) {
+    final String name = _registerNameController.text.trim();
+    final String email = _registerEmailController.text.trim();
+    final String password = _registerPasswordController.text;
+
+    if (name.isEmpty || email.isEmpty || password.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Заполните все поля')),
+        const SnackBar(
+          content: Text('Заполните все поля'),
+        ),
       );
       return;
     }
 
-    setState(() => _registerLoading = true);
+    setState(() {
+      _registerLoading = true;
+    });
 
     try {
-      final success = await _authController.register(
-        _registerNameController.text.trim(),
-        _registerEmailController.text.trim(),
-        _registerPasswordController.text,
+      final bool success = await _authController.register(
+        name,
+        email,
+        password,
       );
 
+      if (!mounted) {
+        return;
+      }
+
       if (success) {
-        if (!mounted) return;
-        Get.offAll(() => const MainScreen());
+        if (_authController.isAdmin) {
+          Get.offAllNamed('/admin');
+        } else {
+          Get.offAll(() => const MainScreen());
+        }
       } else {
-        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Ошибка регистрации')),
+          const SnackBar(
+            content: Text('Ошибка регистрации'),
+          ),
         );
       }
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
+
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Ошибка: $e')),
+        SnackBar(
+          content: Text('Ошибка: $e'),
+        ),
       );
     } finally {
       if (mounted) {
-        setState(() => _registerLoading = false);
+        setState(() {
+          _registerLoading = false;
+        });
       }
     }
   }
@@ -142,7 +196,7 @@ class _AuthScreenState extends State<AuthScreen>
       String label,
       IconData icon,
       ) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
 
     return InputDecoration(
       labelText: label,
@@ -159,7 +213,7 @@ class _AuthScreenState extends State<AuthScreen>
     required VoidCallback onPressed,
     required String title,
   }) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
 
     if (isLoading) {
       return Padding(
@@ -194,19 +248,108 @@ class _AuthScreenState extends State<AuthScreen>
             borderRadius: BorderRadius.circular(18),
           ),
         ),
-        child: Text(title),
+        child: Text(
+          title,
+          style: const TextStyle(
+            fontWeight: FontWeight.w800,
+          ),
+        ),
       ),
+    );
+  }
+
+  Widget _buildLoginTab(BuildContext context) {
+    return Column(
+      children: [
+        TextField(
+          controller: _loginEmailController,
+          keyboardType: TextInputType.emailAddress,
+          textInputAction: TextInputAction.next,
+          decoration: _decoration(
+            context,
+            'Email',
+            Icons.mail_outline_rounded,
+          ),
+        ),
+        const SizedBox(height: 14),
+        TextField(
+          controller: _loginPasswordController,
+          obscureText: true,
+          textInputAction: TextInputAction.done,
+          onSubmitted: (_) => _login(),
+          decoration: _decoration(
+            context,
+            'Пароль',
+            Icons.lock_outline_rounded,
+          ),
+        ),
+        const SizedBox(height: 24),
+        _submitButton(
+          context: context,
+          isLoading: _loginLoading,
+          onPressed: _login,
+          title: 'Войти',
+        ),
+        const SizedBox(height: 12),
+        _DemoHintCard(),
+      ],
+    );
+  }
+
+  Widget _buildRegisterTab(BuildContext context) {
+    return Column(
+      children: [
+        TextField(
+          controller: _registerNameController,
+          textInputAction: TextInputAction.next,
+          decoration: _decoration(
+            context,
+            'Имя',
+            Icons.person_outline_rounded,
+          ),
+        ),
+        const SizedBox(height: 14),
+        TextField(
+          controller: _registerEmailController,
+          keyboardType: TextInputType.emailAddress,
+          textInputAction: TextInputAction.next,
+          decoration: _decoration(
+            context,
+            'Email',
+            Icons.mail_outline_rounded,
+          ),
+        ),
+        const SizedBox(height: 14),
+        TextField(
+          controller: _registerPasswordController,
+          obscureText: true,
+          textInputAction: TextInputAction.done,
+          onSubmitted: (_) => _register(),
+          decoration: _decoration(
+            context,
+            'Пароль',
+            Icons.lock_outline_rounded,
+          ),
+        ),
+        const SizedBox(height: 24),
+        _submitButton(
+          context: context,
+          isLoading: _registerLoading,
+          onPressed: _register,
+          title: 'Создать аккаунт',
+        ),
+      ],
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final cardColor = Theme.of(context).cardColor;
-    final onSurface = Theme.of(context).colorScheme.onSurface;
-    final borderColor = isDark ? AppColors.darkBorder : AppColors.border;
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color cardColor = Theme.of(context).cardColor;
+    final Color onSurface = Theme.of(context).colorScheme.onSurface;
+    final Color borderColor = isDark ? AppColors.darkBorder : AppColors.border;
 
-    final bgGradient = isDark
+    final List<Color> bgGradient = isDark
         ? const [
       AppColors.darkBackground,
       AppColors.darkBackgroundSecondary,
@@ -230,13 +373,17 @@ class _AuthScreenState extends State<AuthScreen>
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(20),
               child: Container(
-                constraints: const BoxConstraints(maxWidth: 460),
+                constraints: const BoxConstraints(
+                  maxWidth: 460,
+                ),
                 padding: const EdgeInsets.all(24),
                 decoration: BoxDecoration(
                   gradient: isDark ? AppColors.darkCardGradient : null,
                   color: isDark ? null : cardColor,
                   borderRadius: BorderRadius.circular(30),
-                  border: Border.all(color: borderColor),
+                  border: Border.all(
+                    color: borderColor,
+                  ),
                   boxShadow: [
                     BoxShadow(
                       color: isDark
@@ -271,7 +418,9 @@ class _AuthScreenState extends State<AuthScreen>
                           ),
                         ],
                       ),
-                      child: Image.asset('assets/flowerLogo2.png'),
+                      child: Image.asset(
+                        'assets/flowerLogo2.png',
+                      ),
                     ),
                     const SizedBox(height: 18),
                     Text(
@@ -293,7 +442,14 @@ class _AuthScreenState extends State<AuthScreen>
                             : AppColors.mutedForeground,
                       ),
                     ),
-                    const SizedBox(height: 24),
+
+                    const SizedBox(height: 18),
+
+                    const AppModeSwitchTile(
+                      compact: true,
+                    ),
+
+                    const SizedBox(height: 20),
 
                     Container(
                       height: 48,
@@ -303,7 +459,9 @@ class _AuthScreenState extends State<AuthScreen>
                             ? AppColors.darkSurfaceElevated
                             : AppColors.primaryLight,
                         borderRadius: BorderRadius.circular(18),
-                        border: Border.all(color: borderColor),
+                        border: Border.all(
+                          color: borderColor,
+                        ),
                       ),
                       child: TabBar(
                         controller: _tabController,
@@ -350,79 +508,18 @@ class _AuthScreenState extends State<AuthScreen>
 
                     const SizedBox(height: 20),
 
-                    SizedBox(
-                      height: 330,
-                      child: TabBarView(
-                        controller: _tabController,
-                        children: [
-                          Column(
-                            children: [
-                              TextField(
-                                controller: _loginEmailController,
-                                decoration: _decoration(
-                                  context,
-                                  'Email',
-                                  Icons.mail_outline_rounded,
-                                ),
-                              ),
-                              const SizedBox(height: 14),
-                              TextField(
-                                controller: _loginPasswordController,
-                                decoration: _decoration(
-                                  context,
-                                  'Пароль',
-                                  Icons.lock_outline_rounded,
-                                ),
-                                obscureText: true,
-                              ),
-                              const SizedBox(height: 24),
-                              _submitButton(
-                                context: context,
-                                isLoading: _loginLoading,
-                                onPressed: _login,
-                                title: 'Войти',
-                              ),
-                            ],
-                          ),
-                          Column(
-                            children: [
-                              TextField(
-                                controller: _registerNameController,
-                                decoration: _decoration(
-                                  context,
-                                  'Имя',
-                                  Icons.person_outline_rounded,
-                                ),
-                              ),
-                              const SizedBox(height: 14),
-                              TextField(
-                                controller: _registerEmailController,
-                                decoration: _decoration(
-                                  context,
-                                  'Email',
-                                  Icons.mail_outline_rounded,
-                                ),
-                              ),
-                              const SizedBox(height: 14),
-                              TextField(
-                                controller: _registerPasswordController,
-                                decoration: _decoration(
-                                  context,
-                                  'Пароль',
-                                  Icons.lock_outline_rounded,
-                                ),
-                                obscureText: true,
-                              ),
-                              const SizedBox(height: 24),
-                              _submitButton(
-                                context: context,
-                                isLoading: _registerLoading,
-                                onPressed: _register,
-                                title: 'Создать аккаунт',
-                              ),
-                            ],
-                          ),
-                        ],
+                    AnimatedSize(
+                      duration: const Duration(milliseconds: 220),
+                      curve: Curves.easeOut,
+                      child: SizedBox(
+                        height: _tabController.index == 0 ? 330 : 300,
+                        child: TabBarView(
+                          controller: _tabController,
+                          children: [
+                            _buildLoginTab(context),
+                            _buildRegisterTab(context),
+                          ],
+                        ),
                       ),
                     ),
                   ],
@@ -431,6 +528,51 @@ class _AuthScreenState extends State<AuthScreen>
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _DemoHintCard extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: isDark
+            ? AppColors.darkSurfaceElevated.withValues(alpha: 0.7)
+            : AppColors.primaryLight.withValues(alpha: 0.7),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDark ? AppColors.darkBorder : AppColors.border,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Демо-аккаунты',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
+              color: Theme.of(context).colorScheme.onSurface,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Клиент: demo@flowershop.ru / 123456\nАдмин: admin@flowershop.ru / admin123',
+            style: TextStyle(
+              fontSize: 12,
+              height: 1.35,
+              color: isDark
+                  ? AppColors.darkMutedForeground
+                  : AppColors.mutedForeground,
+            ),
+          ),
+        ],
       ),
     );
   }

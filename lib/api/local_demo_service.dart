@@ -58,7 +58,7 @@ class LocalDemoService {
       {
         'id': 1,
         'name': 'Демо Пользователь',
-        'email': 'demo@flowershop.ru',
+        'email': 'demo@demo.ru',
         'password': '123456',
         'phone': '+7 (999) 123-45-67',
         'address': 'г. Астана, ул. Цветочная, 12',
