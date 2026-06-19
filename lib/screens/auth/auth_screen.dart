@@ -563,7 +563,7 @@ class _DemoHintCard extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            'Клиент: demo@flowershop.ru / 123456\nАдмин: admin@flowershop.ru / admin123',
+            'Клиент: demo@demo.ru / 123456\nАдмин: admin@flowershop.ru / admin123',
             style: TextStyle(
               fontSize: 12,
               height: 1.35,

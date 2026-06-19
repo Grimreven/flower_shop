@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import '../../controllers/cart_controller.dart';
+
 import '../../controllers/auth_controller.dart';
+import '../../controllers/cart_controller.dart';
 import '../../utils/app_colors.dart';
-import 'package:flower_shop/widgets/product_detail.dart';
+import '../../widgets/product_detail.dart';
+import '../../widgets/product_image.dart';
 import '../order/order_checkout_screen.dart';
 
 class CartScreen extends StatefulWidget {
@@ -20,6 +22,7 @@ class _CartScreenState extends State<CartScreen> {
   @override
   void initState() {
     super.initState();
+
     cartController = Get.find<CartController>();
     authController = Get.find<AuthController>();
 
@@ -29,8 +32,8 @@ class _CartScreenState extends State<CartScreen> {
   }
 
   Widget _buildEmptyState(BuildContext context) {
-    final onSurface = Theme.of(context).colorScheme.onSurface;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color onSurface = Theme.of(context).colorScheme.onSurface;
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Center(
       child: Padding(
@@ -41,7 +44,8 @@ class _CartScreenState extends State<CartScreen> {
             Icon(
               Icons.shopping_cart_outlined,
               size: 72,
-              color: isDark ? AppColors.purpleLight : AppColors.mutedForeground,
+              color:
+              isDark ? AppColors.purpleLight : AppColors.mutedForeground,
             ),
             const SizedBox(height: 16),
             Text(
@@ -74,7 +78,7 @@ class _CartScreenState extends State<CartScreen> {
     required IconData icon,
     required VoidCallback onTap,
   }) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
 
     return InkWell(
       onTap: onTap,
@@ -99,10 +103,13 @@ class _CartScreenState extends State<CartScreen> {
   }
 
   Widget _buildItemCard(BuildContext context, dynamic item) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final cardColor = Theme.of(context).cardColor;
-    final onSurface = Theme.of(context).colorScheme.onSurface;
-    final borderColor = isDark ? AppColors.darkBorder : AppColors.border;
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color cardColor = Theme.of(context).cardColor;
+    final Color onSurface = Theme.of(context).colorScheme.onSurface;
+    final Color borderColor =
+    isDark ? AppColors.darkBorder : AppColors.border;
+    final Color imageBackground =
+    isDark ? AppColors.darkSurfaceSoft : const Color(0xFFF8EFF3);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
@@ -136,23 +143,13 @@ class _CartScreenState extends State<CartScreen> {
           padding: const EdgeInsets.all(14),
           child: Row(
             children: [
-              ClipRRect(
+              ProductImage(
+                imageUrl: item.product.imageUrl,
+                width: 86,
+                height: 86,
+                fit: BoxFit.cover,
+                backgroundColor: imageBackground,
                 borderRadius: BorderRadius.circular(18),
-                child: Container(
-                  color: isDark
-                      ? AppColors.darkSurfaceSoft
-                      : const Color(0xFFF8EFF3),
-                  child: Image.network(
-                    item.product.imageUrl,
-                    width: 86,
-                    height: 86,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => Icon(
-                      Icons.image,
-                      color: isDark ? AppColors.purple : AppColors.primary,
-                    ),
-                  ),
-                ),
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -171,10 +168,11 @@ class _CartScreenState extends State<CartScreen> {
                     ),
                     const SizedBox(height: 8),
                     ShaderMask(
-                      shaderCallback: (bounds) => (isDark
-                          ? AppColors.darkBrandGradient
-                          : AppColors.brandGradient)
-                          .createShader(bounds),
+                      shaderCallback: (Rect bounds) =>
+                          (isDark
+                              ? AppColors.darkBrandGradient
+                              : AppColors.brandGradient)
+                              .createShader(bounds),
                       child: Text(
                         '${item.product.price.toStringAsFixed(0)} ₽',
                         style: const TextStyle(
@@ -190,7 +188,9 @@ class _CartScreenState extends State<CartScreen> {
                         _qtyButton(
                           context: context,
                           icon: Icons.remove,
-                          onTap: () => cartController.decrement(item.product),
+                          onTap: () {
+                            cartController.decrement(item.product);
+                          },
                         ),
                         const SizedBox(width: 10),
                         Obx(
@@ -207,7 +207,9 @@ class _CartScreenState extends State<CartScreen> {
                         _qtyButton(
                           context: context,
                           icon: Icons.add,
-                          onTap: () => cartController.increment(item.product),
+                          onTap: () {
+                            cartController.increment(item.product);
+                          },
                         ),
                       ],
                     ),
@@ -216,7 +218,9 @@ class _CartScreenState extends State<CartScreen> {
               ),
               const SizedBox(width: 10),
               IconButton(
-                onPressed: () => cartController.removeByProduct(item.product),
+                onPressed: () {
+                  cartController.removeByProduct(item.product);
+                },
                 icon: const Icon(
                   Icons.delete_outline_rounded,
                   color: AppColors.danger,
@@ -230,16 +234,19 @@ class _CartScreenState extends State<CartScreen> {
   }
 
   Widget _bottomSummary(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final surface = Theme.of(context).colorScheme.surface;
-    final onSurface = Theme.of(context).colorScheme.onSurface;
-    final borderColor = isDark ? AppColors.darkBorder : AppColors.border;
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color surface = Theme.of(context).colorScheme.surface;
+    final Color onSurface = Theme.of(context).colorScheme.onSurface;
+    final Color borderColor =
+    isDark ? AppColors.darkBorder : AppColors.border;
 
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
       decoration: BoxDecoration(
         color: surface,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+        borderRadius: const BorderRadius.vertical(
+          top: Radius.circular(28),
+        ),
         border: Border(
           top: BorderSide(color: borderColor),
         ),
@@ -269,10 +276,11 @@ class _CartScreenState extends State<CartScreen> {
               ),
               Obx(
                     () => ShaderMask(
-                  shaderCallback: (bounds) => (isDark
-                      ? AppColors.darkBrandGradient
-                      : AppColors.brandGradient)
-                      .createShader(bounds),
+                  shaderCallback: (Rect bounds) =>
+                      (isDark
+                          ? AppColors.darkBrandGradient
+                          : AppColors.brandGradient)
+                          .createShader(bounds),
                   child: Text(
                     '${cartController.totalPrice.toStringAsFixed(0)} ₽',
                     style: const TextStyle(
@@ -310,6 +318,7 @@ class _CartScreenState extends State<CartScreen> {
                   );
                   return;
                 }
+
                 Get.to(() => const OrderCheckoutScreen());
               },
               style: ElevatedButton.styleFrom(
@@ -331,9 +340,9 @@ class _CartScreenState extends State<CartScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final bg = Theme.of(context).scaffoldBackgroundColor;
-    final onSurface = Theme.of(context).colorScheme.onSurface;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color bg = Theme.of(context).scaffoldBackgroundColor;
+    final Color onSurface = Theme.of(context).colorScheme.onSurface;
+    final bool isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
       backgroundColor: bg,
@@ -378,7 +387,7 @@ class _CartScreenState extends State<CartScreen> {
                 child: ListView(
                   padding: const EdgeInsets.all(16),
                   children: cartController.items
-                      .map((item) => _buildItemCard(context, item))
+                      .map((dynamic item) => _buildItemCard(context, item))
                       .toList(),
                 ),
               ),

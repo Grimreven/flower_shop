@@ -7,9 +7,10 @@ import '../../helpers/bouquet_recommender.dart';
 import '../../models/product.dart';
 import '../../utils/app_colors.dart';
 import '../../widgets/product_detail.dart';
+import '../../widgets/product_image.dart';
 
 class BouquetQuizScreen extends StatefulWidget {
-  final List<dynamic> products;
+  final List products;
 
   const BouquetQuizScreen({
     super.key,
@@ -260,7 +261,11 @@ class _BouquetQuizScreenState extends State<BouquetQuizScreen> {
 
   void _nextStep() {
     if (!_isStepCompleted(currentStep)) {
-      Get.snackbar('Выбор', 'Пожалуйста, выберите один из вариантов');
+      Get.snackbar(
+        'Выбор',
+        'Пожалуйста, выберите один из вариантов',
+        snackPosition: SnackPosition.BOTTOM,
+      );
       return;
     }
 
@@ -276,6 +281,7 @@ class _BouquetQuizScreenState extends State<BouquetQuizScreen> {
 
   void _prevStep() {
     if (currentStep == 0) return;
+
     setState(() {
       currentStep -= 1;
     });
@@ -289,6 +295,7 @@ class _BouquetQuizScreenState extends State<BouquetQuizScreen> {
     if (product is Product) {
       return product;
     }
+
     return null;
   }
 
@@ -299,7 +306,8 @@ class _BouquetQuizScreenState extends State<BouquetQuizScreen> {
     final Color onSurface = Theme.of(context).colorScheme.onSurface;
     final Color muted =
     isDark ? AppColors.darkMutedForeground : AppColors.mutedForeground;
-    final Color borderColor = isDark ? AppColors.darkBorder : AppColors.border;
+    final Color borderColor =
+    isDark ? AppColors.darkBorder : AppColors.border;
 
     return Container(
       padding: const EdgeInsets.all(18),
@@ -311,7 +319,7 @@ class _BouquetQuizScreenState extends State<BouquetQuizScreen> {
         boxShadow: [
           BoxShadow(
             color: isDark
-                ? AppColors.purple.withOpacity(0.08)
+                ? AppColors.purple.withValues(alpha: 0.08)
                 : AppColors.shadow,
             blurRadius: 18,
             offset: const Offset(0, 8),
@@ -326,7 +334,7 @@ class _BouquetQuizScreenState extends State<BouquetQuizScreen> {
               CircleAvatar(
                 radius: 22,
                 backgroundColor: isDark
-                    ? AppColors.purple.withOpacity(0.18)
+                    ? AppColors.purple.withValues(alpha: 0.18)
                     : AppColors.primaryLight,
                 child: Icon(
                   step.icon,
@@ -367,21 +375,27 @@ class _BouquetQuizScreenState extends State<BouquetQuizScreen> {
             return Padding(
               padding: const EdgeInsets.only(bottom: 12),
               child: InkWell(
-                onTap: () => _selectValueForStep(currentStep, option.title),
+                onTap: () {
+                  _selectValueForStep(currentStep, option.title);
+                },
                 borderRadius: BorderRadius.circular(18),
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 180),
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
                     color: selected
-                        ? (isDark
+                        ? isDark
                         ? AppColors.darkSurfaceElevated
-                        : AppColors.primaryLight)
-                        : (isDark ? AppColors.darkSurfaceSoft : Colors.white),
+                        : AppColors.primaryLight
+                        : isDark
+                        ? AppColors.darkSurfaceSoft
+                        : Colors.white,
                     borderRadius: BorderRadius.circular(18),
                     border: Border.all(
                       color: selected
-                          ? (isDark ? AppColors.purpleLight : AppColors.primary)
+                          ? isDark
+                          ? AppColors.purpleLight
+                          : AppColors.primary
                           : borderColor,
                       width: selected ? 1.5 : 1,
                     ),
@@ -393,20 +407,20 @@ class _BouquetQuizScreenState extends State<BouquetQuizScreen> {
                         height: 42,
                         decoration: BoxDecoration(
                           color: selected
-                              ? (isDark
-                              ? AppColors.purple.withOpacity(0.18)
-                              : AppColors.primary.withOpacity(0.10))
-                              : (isDark
+                              ? isDark
+                              ? AppColors.purple.withValues(alpha: 0.18)
+                              : AppColors.primary.withValues(alpha: 0.10)
+                              : isDark
                               ? AppColors.darkBackgroundSecondary
-                              : AppColors.primaryLight),
+                              : AppColors.primaryLight,
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Icon(
                           option.icon,
                           color: selected
-                              ? (isDark
+                              ? isDark
                               ? AppColors.purpleLight
-                              : AppColors.primary)
+                              : AppColors.primary
                               : muted,
                         ),
                       ),
@@ -437,7 +451,7 @@ class _BouquetQuizScreenState extends State<BouquetQuizScreen> {
                       Radio<String>(
                         value: option.title,
                         groupValue: selectedValue,
-                        onChanged: (value) {
+                        onChanged: (String? value) {
                           if (value == null) return;
                           _selectValueForStep(currentStep, value);
                         },
@@ -455,6 +469,7 @@ class _BouquetQuizScreenState extends State<BouquetQuizScreen> {
 
   Widget _buildProductCard(BuildContext context, dynamic item) {
     final Product? product = _castProduct(item);
+
     if (product == null) {
       return const SizedBox.shrink();
     }
@@ -464,7 +479,10 @@ class _BouquetQuizScreenState extends State<BouquetQuizScreen> {
     final Color onSurface = Theme.of(context).colorScheme.onSurface;
     final Color muted =
     isDark ? AppColors.darkMutedForeground : AppColors.mutedForeground;
-    final Color borderColor = isDark ? AppColors.darkBorder : AppColors.border;
+    final Color borderColor =
+    isDark ? AppColors.darkBorder : AppColors.border;
+    final Color imageBackground =
+    isDark ? AppColors.darkSurfaceSoft : AppColors.primaryLight;
 
     return Container(
       width: 250,
@@ -477,7 +495,7 @@ class _BouquetQuizScreenState extends State<BouquetQuizScreen> {
         boxShadow: [
           BoxShadow(
             color: isDark
-                ? AppColors.purple.withOpacity(0.08)
+                ? AppColors.purple.withValues(alpha: 0.08)
                 : AppColors.shadow,
             blurRadius: 18,
             offset: const Offset(0, 8),
@@ -500,25 +518,13 @@ class _BouquetQuizScreenState extends State<BouquetQuizScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              ClipRRect(
+              ProductImage(
+                imageUrl: product.imageUrl,
+                height: 170,
+                width: double.infinity,
+                fit: BoxFit.cover,
+                backgroundColor: imageBackground,
                 borderRadius: BorderRadius.circular(18),
-                child: Image.network(
-                  product.imageUrl,
-                  height: 170,
-                  width: double.infinity,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => Container(
-                    height: 170,
-                    color: isDark
-                        ? AppColors.darkSurfaceSoft
-                        : AppColors.primaryLight,
-                    alignment: Alignment.center,
-                    child: Icon(
-                      Icons.image_not_supported_outlined,
-                      color: isDark ? AppColors.purpleLight : AppColors.primary,
-                    ),
-                  ),
-                ),
               ),
               const SizedBox(height: 14),
               Text(
@@ -564,7 +570,8 @@ class _BouquetQuizScreenState extends State<BouquetQuizScreen> {
     final Color onSurface = Theme.of(context).colorScheme.onSurface;
     final Color muted =
     isDark ? AppColors.darkMutedForeground : AppColors.mutedForeground;
-    final Color borderColor = isDark ? AppColors.darkBorder : AppColors.border;
+    final Color borderColor =
+    isDark ? AppColors.darkBorder : AppColors.border;
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -609,9 +616,8 @@ class _BouquetQuizScreenState extends State<BouquetQuizScreen> {
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
-                children: result.summaryChips
-                    .map(
-                      (chip) => Container(
+                children: result.summaryChips.map((String chip) {
+                  return Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 12,
                       vertical: 8,
@@ -627,14 +633,11 @@ class _BouquetQuizScreenState extends State<BouquetQuizScreen> {
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
-                        color: isDark
-                            ? AppColors.purpleLight
-                            : AppColors.primary,
+                        color: isDark ? AppColors.purpleLight : AppColors.primary,
                       ),
                     ),
-                  ),
-                )
-                    .toList(),
+                  );
+                }).toList(),
               ),
               const SizedBox(height: 16),
               Text(
@@ -663,7 +666,7 @@ class _BouquetQuizScreenState extends State<BouquetQuizScreen> {
           child: ListView(
             scrollDirection: Axis.horizontal,
             children: result.products
-                .map((item) => _buildProductCard(context, item))
+                .map((dynamic item) => _buildProductCard(context, item))
                 .toList(),
           ),
         ),

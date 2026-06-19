@@ -8,6 +8,7 @@ import '../controllers/cart_controller.dart';
 import '../models/product.dart';
 import '../utils/app_colors.dart';
 import 'app_auth_required_dialog.dart';
+import 'product_image.dart';
 
 class ProductDetail extends StatefulWidget {
   final Product product;
@@ -40,18 +41,14 @@ class _ProductDetailState extends State<ProductDetail> {
       final List<Map<String, dynamic>> data =
       await ServerApiService.getPriceHistory(widget.product.id);
 
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
 
       setState(() {
         priceHistory = data;
         isLoadingPriceHistory = false;
       });
     } catch (_) {
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
 
       setState(() {
         priceHistory = [];
@@ -61,8 +58,8 @@ class _ProductDetailState extends State<ProductDetail> {
   }
 
   Future<void> _handleAddToCart(BuildContext context) async {
-    final bool isLoggedIn =
-        widget.authController.isLoggedIn || widget.authController.token.isNotEmpty;
+    final bool isLoggedIn = widget.authController.isLoggedIn ||
+        widget.authController.token.isNotEmpty;
 
     if (!isLoggedIn) {
       await AppAuthRequiredDialog.show(
@@ -77,67 +74,33 @@ class _ProductDetailState extends State<ProductDetail> {
 
     await widget.cartController.addToCart(widget.product);
 
-    if (!mounted) {
-      return;
-    }
+    if (!mounted) return;
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text('${widget.product.name} добавлен в корзину'),
+        behavior: SnackBarBehavior.floating,
       ),
     );
   }
 
-  Widget _ratingStars(double rating, bool isDark) {
-    final int fullStars = rating.floor().clamp(0, 5);
-    final bool hasHalfStar = (rating - fullStars) >= 0.5;
-
-    return Row(
-      children: [
-        ...List.generate(
-          fullStars,
-              (_) => Icon(
-            Icons.star_rounded,
-            size: 20,
-            color: isDark ? AppColors.purpleLight : Colors.amber,
-          ),
-        ),
-        if (hasHalfStar)
-          Icon(
-            Icons.star_half_rounded,
-            size: 20,
-            color: isDark ? AppColors.purpleLight : Colors.amber,
-          ),
-      ],
-    );
-  }
-
   double _toDouble(dynamic value) {
-    if (value == null) {
-      return 0;
-    }
+    if (value == null) return 0;
 
-    if (value is num) {
-      return value.toDouble();
-    }
+    if (value is num) return value.toDouble();
 
-    return double.tryParse(value.toString()) ?? 0;
+    return double.tryParse(value.toString().replaceAll(',', '.')) ?? 0;
   }
 
   DateTime? _toDate(dynamic value) {
-    if (value == null) {
-      return null;
-    }
-
+    if (value == null) return null;
     return DateTime.tryParse(value.toString());
   }
 
   String _formatDate(dynamic value) {
     final DateTime? date = _toDate(value);
 
-    if (date == null) {
-      return '';
-    }
+    if (date == null) return '';
 
     final String day = date.day.toString().padLeft(2, '0');
     final String month = date.month.toString().padLeft(2, '0');
@@ -159,9 +122,7 @@ class _ProductDetailState extends State<ProductDetail> {
       return _toDouble(item['price']) > 0;
     }).toList();
 
-    if (result.isEmpty) {
-      return result;
-    }
+    if (result.isEmpty) return result;
 
     final double lastPrice = _toDouble(result.last['price']);
 
@@ -175,6 +136,31 @@ class _ProductDetailState extends State<ProductDetail> {
     }
 
     return result;
+  }
+
+  Widget _ratingStars(double rating, bool isDark) {
+    final int fullStars = rating.floor().clamp(0, 5);
+    final bool hasHalfStar = (rating - fullStars) >= 0.5;
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        ...List.generate(
+          fullStars,
+              (_) => Icon(
+            Icons.star_rounded,
+            size: 20,
+            color: isDark ? AppColors.purpleLight : Colors.amber,
+          ),
+        ),
+        if (hasHalfStar)
+          Icon(
+            Icons.star_half_rounded,
+            size: 20,
+            color: isDark ? AppColors.purpleLight : Colors.amber,
+          ),
+      ],
+    );
   }
 
   Widget _card({
@@ -197,8 +183,9 @@ class _ProductDetailState extends State<ProductDetail> {
         ),
         boxShadow: [
           BoxShadow(
-            color:
-            isDark ? AppColors.purple.withValues(alpha: 0.05) : AppColors.shadow,
+            color: isDark
+                ? AppColors.purple.withValues(alpha: 0.05)
+                : AppColors.shadow,
             blurRadius: 18,
             offset: const Offset(0, 8),
           ),
@@ -340,23 +327,6 @@ class _ProductDetailState extends State<ProductDetail> {
     final double minY = (minPrice - padding).clamp(0, double.infinity);
     final double maxY = maxPrice + padding;
 
-    final double firstPrice = prices.first;
-    final double lastPrice = prices.last;
-    final double change = lastPrice - firstPrice;
-
-    final bool isIncrease = change > 0;
-    final bool isDecrease = change < 0;
-
-    String changeText;
-
-    if (isIncrease) {
-      changeText = '+${change.toStringAsFixed(0)} ₽';
-    } else if (isDecrease) {
-      changeText = '${change.toStringAsFixed(0)} ₽';
-    } else {
-      changeText = 'без изменений';
-    }
-
     return _card(
       context: context,
       padding: const EdgeInsets.fromLTRB(18, 18, 18, 14),
@@ -369,8 +339,9 @@ class _ProductDetailState extends State<ProductDetail> {
                 width: 42,
                 height: 42,
                 decoration: BoxDecoration(
-                  gradient:
-                  isDark ? AppColors.darkBrandGradient : AppColors.brandGradient,
+                  gradient: isDark
+                      ? AppColors.darkBrandGradient
+                      : AppColors.brandGradient,
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: const Icon(
@@ -380,51 +351,12 @@ class _ProductDetailState extends State<ProductDetail> {
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Динамика цены',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w800,
-                        color: onSurface,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      'История изменений из админ-панели',
-                      style: TextStyle(
-                        color: muted,
-                        fontSize: 13,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 7,
-                ),
-                decoration: BoxDecoration(
-                  color: isIncrease
-                      ? AppColors.danger.withValues(alpha: 0.12)
-                      : isDecrease
-                      ? AppColors.success.withValues(alpha: 0.12)
-                      : primary.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(999),
-                ),
                 child: Text(
-                  changeText,
+                  'Динамика цены',
                   style: TextStyle(
-                    color: isIncrease
-                        ? AppColors.danger
-                        : isDecrease
-                        ? AppColors.success
-                        : primary,
+                    fontSize: 18,
                     fontWeight: FontWeight.w800,
-                    fontSize: 12,
+                    color: onSurface,
                   ),
                 ),
               ),
@@ -526,7 +458,8 @@ class _ProductDetailState extends State<ProductDetail> {
                           radius: 4,
                           color: primary,
                           strokeWidth: 3,
-                          strokeColor: isDark ? AppColors.darkSurface : Colors.white,
+                          strokeColor:
+                          isDark ? AppColors.darkSurface : Colors.white,
                         );
                       },
                     ),
@@ -543,80 +476,8 @@ class _ProductDetailState extends State<ProductDetail> {
                     ),
                   ),
                 ],
-                lineTouchData: LineTouchData(
-                  touchTooltipData: LineTouchTooltipData(
-                    tooltipRoundedRadius: 14,
-                    getTooltipItems: (List<LineBarSpot> touchedSpots) {
-                      return touchedSpots.map((LineBarSpot spot) {
-                        final int index = spot.x.toInt();
-                        final String date = index >= 0 && index < history.length
-                            ? _formatDate(history[index]['changed_at'])
-                            : '';
-
-                        return LineTooltipItem(
-                          '${spot.y.toStringAsFixed(0)} ₽\n$date',
-                          const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        );
-                      }).toList();
-                    },
-                  ),
-                ),
               ),
             ),
-          ),
-          const SizedBox(height: 12),
-          Divider(
-            color: isDark ? AppColors.darkBorder : AppColors.border,
-          ),
-          const SizedBox(height: 8),
-          ...history.reversed.take(3).map(
-                (Map<String, dynamic> item) {
-              final double oldPrice = _toDouble(item['old_price']);
-              final double newPrice = _toDouble(item['new_price'] ?? item['price']);
-
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.history_rounded,
-                      size: 18,
-                      color: muted,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        _formatDate(item['changed_at']),
-                        style: TextStyle(
-                          color: muted,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                    if (oldPrice > 0) ...[
-                      Text(
-                        '${oldPrice.toStringAsFixed(0)} ₽',
-                        style: TextStyle(
-                          color: muted,
-                          decoration: TextDecoration.lineThrough,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                    ],
-                    Text(
-                      '${newPrice.toStringAsFixed(0)} ₽',
-                      style: TextStyle(
-                        color: primary,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            },
           ),
         ],
       ),
@@ -645,7 +506,8 @@ class _ProductDetailState extends State<ProductDetail> {
             widget.product.inStock
                 ? Icons.check_circle_rounded
                 : Icons.remove_circle_rounded,
-            color: widget.product.inStock ? AppColors.success : AppColors.danger,
+            color:
+            widget.product.inStock ? AppColors.success : AppColors.danger,
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -664,39 +526,159 @@ class _ProductDetailState extends State<ProductDetail> {
     );
   }
 
-  Widget _addToCartButton(BuildContext context) {
+  Widget _addToCartSection(BuildContext context) {
     final bool isDark = Theme.of(context).brightness == Brightness.dark;
+    final Color onSurface = Theme.of(context).colorScheme.onSurface;
+    final Color borderColor =
+    isDark ? AppColors.darkBorder : AppColors.border;
+    final Color quantityBackground =
+    isDark ? AppColors.darkSurfaceElevated : AppColors.primaryLight;
 
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        gradient: isDark ? AppColors.darkBrandGradient : AppColors.brandGradient,
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: [
-          BoxShadow(
-            color: (isDark ? AppColors.purple : AppColors.primary)
-                .withValues(alpha: 0.18),
-            blurRadius: 16,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: ElevatedButton.icon(
-        onPressed: widget.product.inStock ? () => _handleAddToCart(context) : null,
-        icon: const Icon(Icons.shopping_bag_outlined),
-        label: const Text('Добавить в корзину'),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.transparent,
-          shadowColor: Colors.transparent,
-          foregroundColor: Colors.white,
-          disabledBackgroundColor: Colors.transparent,
-          disabledForegroundColor: Colors.white.withValues(alpha: 0.6),
-          minimumSize: const Size.fromHeight(56),
-          shape: RoundedRectangleBorder(
+    return Obx(() {
+      final bool isLoggedIn = widget.authController.isLoggedIn ||
+          widget.authController.token.isNotEmpty;
+
+      final bool inCart = widget.cartController.isInCart(widget.product);
+      final int qty = widget.cartController.getQuantity(widget.product);
+
+      if (!isLoggedIn) {
+        return DecoratedBox(
+          decoration: BoxDecoration(
+            gradient:
+            isDark ? AppColors.darkBrandGradient : AppColors.brandGradient,
             borderRadius: BorderRadius.circular(18),
+            boxShadow: [
+              BoxShadow(
+                color: (isDark ? AppColors.purple : AppColors.primary)
+                    .withValues(alpha: 0.18),
+                blurRadius: 16,
+                offset: const Offset(0, 8),
+              ),
+            ],
           ),
+          child: ElevatedButton.icon(
+            onPressed: () => _handleAddToCart(context),
+            icon: const Icon(Icons.login_rounded),
+            label: const Text('Войти и добавить'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.transparent,
+              shadowColor: Colors.transparent,
+              foregroundColor: Colors.white,
+              minimumSize: const Size.fromHeight(56),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(18),
+              ),
+            ),
+          ),
+        );
+      }
+
+      if (!inCart) {
+        return DecoratedBox(
+          decoration: BoxDecoration(
+            gradient:
+            isDark ? AppColors.darkBrandGradient : AppColors.brandGradient,
+            borderRadius: BorderRadius.circular(18),
+            boxShadow: [
+              BoxShadow(
+                color: (isDark ? AppColors.purple : AppColors.primary)
+                    .withValues(alpha: 0.18),
+                blurRadius: 16,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: ElevatedButton.icon(
+            onPressed:
+            widget.product.inStock ? () => _handleAddToCart(context) : null,
+            icon: const Icon(Icons.shopping_bag_outlined),
+            label: const Text('Добавить в корзину'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.transparent,
+              shadowColor: Colors.transparent,
+              foregroundColor: Colors.white,
+              disabledBackgroundColor: Colors.transparent,
+              disabledForegroundColor: Colors.white.withValues(alpha: 0.6),
+              minimumSize: const Size.fromHeight(56),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(18),
+              ),
+            ),
+          ),
+        );
+      }
+
+      return Container(
+        height: 56,
+        decoration: BoxDecoration(
+          color: quantityBackground,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: borderColor),
+          boxShadow: [
+            BoxShadow(
+              color: isDark
+                  ? AppColors.purple.withValues(alpha: 0.08)
+                  : AppColors.shadow,
+              blurRadius: 16,
+              offset: const Offset(0, 8),
+            ),
+          ],
         ),
-      ),
-    );
+        child: Row(
+          children: [
+            const SizedBox(width: 6),
+            IconButton(
+              splashRadius: 22,
+              icon: Icon(
+                Icons.remove_circle_outline_rounded,
+                color: isDark ? AppColors.purpleLight : AppColors.primary,
+                size: 28,
+              ),
+              onPressed: () {
+                widget.cartController.decrement(widget.product);
+              },
+            ),
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    '$qty шт.',
+                    style: TextStyle(
+                      color: onSurface,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  Text(
+                    'В корзине',
+                    style: TextStyle(
+                      color: isDark
+                          ? AppColors.darkMutedForeground
+                          : AppColors.mutedForeground,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            IconButton(
+              splashRadius: 22,
+              icon: Icon(
+                Icons.add_circle_outline_rounded,
+                color: isDark ? AppColors.purpleLight : AppColors.primary,
+                size: 28,
+              ),
+              onPressed: () {
+                widget.cartController.increment(widget.product);
+              },
+            ),
+            const SizedBox(width: 6),
+          ],
+        ),
+      );
+    });
   }
 
   @override
@@ -712,7 +694,7 @@ class _ProductDetailState extends State<ProductDetail> {
       body: CustomScrollView(
         slivers: [
           SliverAppBar(
-            expandedHeight: 380,
+            expandedHeight: 360,
             pinned: true,
             automaticallyImplyLeading: false,
             backgroundColor: bg,
@@ -742,28 +724,21 @@ class _ProductDetailState extends State<ProductDetail> {
                 children: [
                   Hero(
                     tag: 'product_${widget.product.id}',
-                    child: Image.network(
-                      widget.product.imageUrl,
+                    child: ProductImage(
+                      imageUrl: widget.product.imageUrl,
                       fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => Container(
-                        color: isDark
-                            ? AppColors.darkSurfaceElevated
-                            : AppColors.primaryLight,
-                        child: Icon(
-                          Icons.local_florist_rounded,
-                          size: 72,
-                          color: isDark ? AppColors.purpleLight : AppColors.primary,
-                        ),
-                      ),
+                      backgroundColor: isDark
+                          ? AppColors.darkSurfaceElevated
+                          : AppColors.primaryLight,
                     ),
                   ),
                   DecoratedBox(
                     decoration: BoxDecoration(
                       gradient: LinearGradient(
                         colors: [
-                          Colors.black.withValues(alpha: 0.05),
-                          Colors.black.withValues(alpha: 0.25),
-                          Colors.black.withValues(alpha: 0.65),
+                          Colors.black.withValues(alpha: 0.02),
+                          Colors.black.withValues(alpha: 0.18),
+                          Colors.black.withValues(alpha: 0.52),
                         ],
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
@@ -817,9 +792,9 @@ class _ProductDetailState extends State<ProductDetail> {
               ),
             ),
           ),
+
           SliverToBoxAdapter(
             child: Container(
-              transform: Matrix4.translationValues(0, -24, 0),
               decoration: BoxDecoration(
                 color: bg,
                 borderRadius: const BorderRadius.vertical(
@@ -827,56 +802,68 @@ class _ProductDetailState extends State<ProductDetail> {
                 ),
               ),
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(18, 20, 18, 28),
+                padding: const EdgeInsets.fromLTRB(18, 34, 18, 28),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        Expanded(
-                          child: Row(
-                            children: [
-                              _ratingStars(widget.product.rating, isDark),
-                              const SizedBox(width: 10),
-                              Text(
-                                widget.product.rating.toStringAsFixed(1),
-                                style: TextStyle(
-                                  color: muted,
-                                  fontWeight: FontWeight.w700,
+                    _card(
+                      context: context,
+                      padding: const EdgeInsets.all(18),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    _ratingStars(widget.product.rating, isDark),
+                                    const SizedBox(width: 10),
+                                    Text(
+                                      widget.product.rating.toStringAsFixed(1),
+                                      style: TextStyle(
+                                        color: muted,
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                              ),
-                              if (widget.product.reviewCount > 0) ...[
-                                const SizedBox(width: 8),
-                                Text(
-                                  '(${widget.product.reviewCount})',
-                                  style: TextStyle(
-                                    color: muted,
-                                    fontWeight: FontWeight.w600,
+                                if (widget.product.reviewCount > 0) ...[
+                                  const SizedBox(height: 6),
+                                  Text(
+                                    '${widget.product.reviewCount} отзывов',
+                                    style: TextStyle(
+                                      color: muted,
+                                      fontWeight: FontWeight.w600,
+                                    ),
                                   ),
-                                ),
+                                ],
                               ],
-                            ],
-                          ),
-                        ),
-                        ShaderMask(
-                          shaderCallback: (Rect bounds) =>
-                              (isDark
-                                  ? AppColors.darkBrandGradient
-                                  : AppColors.brandGradient)
-                                  .createShader(bounds),
-                          child: Text(
-                            '${widget.product.price.toStringAsFixed(0)} ₽',
-                            style: const TextStyle(
-                              fontSize: 30,
-                              fontWeight: FontWeight.w900,
-                              color: Colors.white,
                             ),
                           ),
-                        ),
-                      ],
+                          const SizedBox(width: 16),
+                          ShaderMask(
+                            shaderCallback: (Rect bounds) =>
+                                (isDark
+                                    ? AppColors.darkBrandGradient
+                                    : AppColors.brandGradient)
+                                    .createShader(bounds),
+                            child: Text(
+                              '${widget.product.price.toStringAsFixed(0)} ₽',
+                              style: const TextStyle(
+                                fontSize: 30,
+                                fontWeight: FontWeight.w900,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
+
                     const SizedBox(height: 18),
+
                     Row(
                       children: [
                         _infoPill(
@@ -901,7 +888,9 @@ class _ProductDetailState extends State<ProductDetail> {
                         ),
                       ],
                     ),
+
                     const SizedBox(height: 18),
+
                     _card(
                       context: context,
                       child: Column(
@@ -927,12 +916,13 @@ class _ProductDetailState extends State<ProductDetail> {
                         ],
                       ),
                     ),
+
                     const SizedBox(height: 18),
                     _priceHistoryCard(context),
                     const SizedBox(height: 18),
                     _buildStockCard(context),
                     const SizedBox(height: 26),
-                    _addToCartButton(context),
+                    _addToCartSection(context),
                   ],
                 ),
               ),

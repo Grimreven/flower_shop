@@ -1,4 +1,3 @@
-import '../config/app_config.dart';
 import '../models/product.dart';
 import '../models/user.dart';
 import 'local_demo_service.dart';
@@ -8,9 +7,7 @@ class ApiService {
   static final LocalDemoService _localDemoService = LocalDemoService.instance;
 
   static Future<List<Product>> fetchAllProducts() async {
-    final List<dynamic> data = AppConfig.useBackend
-        ? await ServerApiService.getProducts()
-        : await _localDemoService.getProducts();
+    final List<Map<String, dynamic>> data = await ServerApiService.getProducts();
 
     return data
         .map((dynamic item) => Product.fromJson(Map<String, dynamic>.from(item)))
@@ -18,9 +15,8 @@ class ApiService {
   }
 
   static Future<List<Product>> fetchPopularProducts() async {
-    final List<dynamic> data = AppConfig.useBackend
-        ? await ServerApiService.getPopularProducts()
-        : await _localDemoService.getPopularProducts();
+    final List<Map<String, dynamic>> data =
+    await ServerApiService.getPopularProducts();
 
     return data
         .map((dynamic item) => Product.fromJson(Map<String, dynamic>.from(item)))

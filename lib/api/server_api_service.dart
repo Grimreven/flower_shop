@@ -206,7 +206,7 @@ class ServerApiService {
 
   static Future<List<Map<String, dynamic>>> getPopularProducts() async {
     if (AppConfig.isDemoMode) {
-      return _localDemoService.getPopularProducts();
+      return _demo.getPopularProducts();
     }
 
     final http.Response response = await http.get(
@@ -1030,6 +1030,21 @@ class _DemoDataStore {
     }).toList();
   }
 
+  Future<List<Map<String, dynamic>>> getPopularProducts() async {
+    final List<Map<String, dynamic>> products = await getProducts();
+
+    final List<Map<String, dynamic>> sorted =
+    List<Map<String, dynamic>>.from(products);
+
+    sorted.sort((Map<String, dynamic> a, Map<String, dynamic> b) {
+      final double ratingA = _toDouble(a['rating']);
+      final double ratingB = _toDouble(b['rating']);
+      return ratingB.compareTo(ratingA);
+    });
+
+    return sorted.take(6).toList();
+  }
+
   Future<List<Map<String, dynamic>>> getCategories() async {
     await ensureReady();
 
@@ -1725,6 +1740,14 @@ class _DemoDataStore {
     bool changed = false;
 
     for (int i = 0; i < products.length; i++) {
+      final String? assetPath = _assetImageForProduct(products[i]);
+
+      if (assetPath != null && assetPath.isNotEmpty) {
+        products[i]['image_url'] = assetPath;
+        products[i]['imageUrl'] = assetPath;
+        changed = true;
+      }
+
       if (products[i]['review_count'] == null) {
         products[i]['review_count'] = 12 + i;
         changed = true;
@@ -1743,12 +1766,192 @@ class _DemoDataStore {
     if (products.isEmpty) {
       products.addAll([
         {
+          'id': 1,
+          'name': 'Розовый рассвет',
+          'description': 'Классический букет из пастельных роз.',
+          'price': 1800.0,
+          'image_url': 'assets/products/pink_rose.jpg',
+          'imageUrl': 'assets/products/pink_rose.jpg',
+          'category_id': 1,
+          'category_name': 'Розы',
+          'rating': 4.9,
+          'review_count': 18,
+          'in_stock': true,
+          'care': [
+            'Менять воду ежедневно',
+            'Не ставить рядом с батареей',
+            'Подрезать стебли',
+          ],
+        },
+        {
+          'id': 2,
+          'name': 'Пионы мечты',
+          'description': 'Пышный нежный букет для особенного случая.',
+          'price': 3200.0,
+          'image_url': 'assets/products/rose_bouquet.jpg',
+          'imageUrl': 'assets/products/rose_bouquet.jpg',
+          'category_id': 2,
+          'category_name': 'Пионы',
+          'rating': 4.8,
+          'review_count': 21,
+          'in_stock': true,
+          'care': [
+            'Менять воду ежедневно',
+            'Держать в прохладном месте',
+            'Не ставить под прямые солнечные лучи',
+          ],
+        },
+        {
+          'id': 3,
+          'name': 'Яркий микс',
+          'description': 'Сочный букет для праздника и хорошего настроения.',
+          'price': 2700.0,
+          'image_url': 'assets/products/tulip_mix.jpg',
+          'imageUrl': 'assets/products/tulip_mix.jpg',
+          'category_id': 3,
+          'category_name': 'Микс',
+          'rating': 4.7,
+          'review_count': 16,
+          'in_stock': true,
+          'care': [
+            'Менять воду ежедневно',
+            'Подрезать стебли',
+            'Беречь от сквозняка',
+          ],
+        },
+        {
+          'id': 4,
+          'name': 'Минималистичный white',
+          'description': 'Лаконичный букет в светлой палитре.',
+          'price': 2400.0,
+          'image_url': 'assets/products/white_lilies.jpg',
+          'imageUrl': 'assets/products/white_lilies.jpg',
+          'category_id': 4,
+          'category_name': 'Минимализм',
+          'rating': 4.6,
+          'review_count': 14,
+          'in_stock': true,
+          'care': [
+            'Хранить в прохладном месте',
+            'Менять воду каждый день',
+            'Подрезать стебли под углом',
+          ],
+        },
+        {
+          'id': 5,
+          'name': 'Романтика love',
+          'description': 'Роскошный букет для романтического признания.',
+          'price': 5100.0,
+          'image_url': 'assets/products/red_rosses.jpg',
+          'imageUrl': 'assets/products/red_rosses.jpg',
+          'category_id': 1,
+          'category_name': 'Розы',
+          'rating': 5.0,
+          'review_count': 28,
+          'in_stock': true,
+          'care': [
+            'Менять воду ежедневно',
+            'Не ставить рядом с отоплением',
+            'Удалять увядшие лепестки',
+          ],
+        },
+        {
+          'id': 6,
+          'name': 'Гортензия pastel',
+          'description': 'Мягкий и очень нежный букет в пастельной гамме.',
+          'price': 2900.0,
+          'image_url': 'assets/products/spring_box.jpg',
+          'imageUrl': 'assets/products/spring_box.jpg',
+          'category_id': 5,
+          'category_name': 'Гортензии',
+          'rating': 4.8,
+          'review_count': 20,
+          'in_stock': true,
+          'care': [
+            'Держать в прохладном месте',
+            'Следить за уровнем воды',
+            'Не оставлять на солнце',
+          ],
+        },
+        {
+          'id': 7,
+          'name': 'Герберы fire',
+          'description': 'Яркий букет для хорошего настроения.',
+          'price': 2100.0,
+          'image_url': 'assets/products/tulip_mix.jpg',
+          'imageUrl': 'assets/products/tulip_mix.jpg',
+          'category_id': 6,
+          'category_name': 'Герберы',
+          'rating': 4.5,
+          'review_count': 11,
+          'in_stock': true,
+          'care': [
+            'Менять воду ежедневно',
+            'Подрезать стебли',
+            'Не ставить рядом с фруктами',
+          ],
+        },
+        {
+          'id': 8,
+          'name': 'Эвкалипт mono',
+          'description': 'Стильная композиция в минималистичном стиле.',
+          'price': 2600.0,
+          'image_url': 'assets/products/white_lilies.jpg',
+          'imageUrl': 'assets/products/white_lilies.jpg',
+          'category_id': 4,
+          'category_name': 'Минимализм',
+          'rating': 4.4,
+          'review_count': 10,
+          'in_stock': true,
+          'care': [
+            'Хранить вдали от отопления',
+            'Обновлять срез',
+            'Менять воду через день',
+          ],
+        },
+        {
+          'id': 9,
+          'name': 'Праздничный день рождения',
+          'description': 'Праздничный букет для дня рождения.',
+          'price': 3500.0,
+          'image_url': 'assets/products/flower_bascet.jpg',
+          'imageUrl': 'assets/products/flower_bascet.jpg',
+          'category_id': 7,
+          'category_name': 'Подарочные',
+          'rating': 4.9,
+          'review_count': 24,
+          'in_stock': true,
+          'care': [
+            'Менять воду ежедневно',
+            'Не ставить под солнце',
+            'Подрезать стебли',
+          ],
+        },
+        {
+          'id': 10,
+          'name': 'Спасибо нежность',
+          'description': 'Идеальный букет, чтобы сказать спасибо.',
+          'price': 1900.0,
+          'image_url': 'assets/products/pink_rose.jpg',
+          'imageUrl': 'assets/products/pink_rose.jpg',
+          'category_id': 7,
+          'category_name': 'Подарочные',
+          'rating': 4.7,
+          'review_count': 15,
+          'in_stock': true,
+          'care': [
+            'Менять воду ежедневно',
+            'Беречь от сквозняка',
+            'Подрезать стебли под углом',
+          ],
+        },
+        {
           'id': 11,
           'name': 'Авторский букет',
           'description': 'Композиция от флориста в нежной палитре.',
           'price': 4300.0,
-          'image_url':
-          'https://images.unsplash.com/photo-1487070183336-b863922373d4',
+          'image_url': 'assets/products/rose_bouquet.jpg',
+          'imageUrl': 'assets/products/rose_bouquet.jpg',
           'category_id': 3,
           'category_name': 'Микс',
           'rating': 4.9,
@@ -1765,8 +1968,8 @@ class _DemoDataStore {
           'name': 'Нежная коробка',
           'description': 'Цветочная композиция в подарочной коробке.',
           'price': 3900.0,
-          'image_url':
-          'https://images.unsplash.com/photo-1563241527-3004b7be0ffd',
+          'image_url': 'assets/products/spring_box.jpg',
+          'imageUrl': 'assets/products/spring_box.jpg',
           'category_id': 7,
           'category_name': 'Подарочные',
           'rating': 4.8,
@@ -1778,6 +1981,24 @@ class _DemoDataStore {
             'Беречь от сквозняка',
           ],
         },
+        {
+          'id': 13,
+          'name': 'Свадебный букет',
+          'description': 'Нежный букет для свадьбы и фотосессии.',
+          'price': 6800.0,
+          'image_url': 'assets/products/wedding_bouquet.jpg',
+          'imageUrl': 'assets/products/wedding_bouquet.jpg',
+          'category_id': 7,
+          'category_name': 'Подарочные',
+          'rating': 5.0,
+          'review_count': 12,
+          'in_stock': true,
+          'care': [
+            'Хранить в прохладном месте',
+            'Не оставлять под прямым солнцем',
+            'Подрезать стебли перед постановкой в воду',
+          ],
+        },
       ]);
 
       changed = true;
@@ -1786,6 +2007,65 @@ class _DemoDataStore {
     if (changed) {
       await prefs.setString(_productsKey, jsonEncode(products));
     }
+  }
+
+  String? _assetImageForProduct(Map<String, dynamic> product) {
+    final int id = _toInt(product['id']);
+    final String name = product['name']?.toString().toLowerCase().trim() ?? '';
+
+    if (id == 1 || name.contains('розовый') || name.contains('рассвет')) {
+      return 'assets/products/pink_rose.jpg';
+    }
+
+    if (id == 2 || name.contains('пионы')) {
+      return 'assets/products/rose_bouquet.jpg';
+    }
+
+    if (id == 3 || name.contains('микс')) {
+      return 'assets/products/tulip_mix.jpg';
+    }
+
+    if (id == 4 || name.contains('white') || name.contains('бел')) {
+      return 'assets/products/white_lilies.jpg';
+    }
+
+    if (id == 5 || name.contains('романтика') || name.contains('love')) {
+      return 'assets/products/red_rosses.jpg';
+    }
+
+    if (id == 6 || name.contains('гортензия')) {
+      return 'assets/products/spring_box.jpg';
+    }
+
+    if (id == 7 || name.contains('герберы')) {
+      return 'assets/products/tulip_mix.jpg';
+    }
+
+    if (id == 8 || name.contains('эвкалипт')) {
+      return 'assets/products/white_lilies.jpg';
+    }
+
+    if (id == 9 || name.contains('день рождения')) {
+      return 'assets/products/flower_bascet.jpg';
+    }
+
+    if (id == 10 || name.contains('спасибо')) {
+      return 'assets/products/pink_rose.jpg';
+    }
+
+    if (id == 11 || name.contains('авторский')) {
+      return 'assets/products/rose_bouquet.jpg';
+    }
+
+    if (id == 12 || name.contains('коробка')) {
+      return 'assets/products/spring_box.jpg';
+    }
+
+    if (id == 13 || name.contains('свадеб')) {
+      return 'assets/products/wedding_bouquet.jpg';
+    }
+
+    return 'assets/products/rose_bouquet.jpg';
   }
 
   Future<void> _ensurePriceHistory(SharedPreferences prefs) async {

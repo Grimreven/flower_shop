@@ -15,6 +15,7 @@ import '../../models/user_address.dart';
 import '../../utils/app_colors.dart';
 import 'order_success_screen.dart';
 import '../../widgets/sbp_bank_picker_sheet.dart';
+import '../../widgets/address_form_sheet.dart';
 
 class _LocalCartItem {
   final Product product;
@@ -552,207 +553,59 @@ class _OrderCheckoutScreenState extends State<OrderCheckoutScreen> {
   }
 
   Future<void> _showAddAddressDialog() async {
-    final TextEditingController titleController = TextEditingController();
-    final TextEditingController addressController = TextEditingController();
-    final TextEditingController entranceController = TextEditingController();
-    final TextEditingController floorController = TextEditingController();
-    final TextEditingController apartmentController = TextEditingController();
-    final TextEditingController commentController = TextEditingController();
+    final dynamic sheetResult = await AddressFormSheet.show(
+      context,
+      isFirstAddress: _localAddresses.isEmpty,
+    );
 
-    bool isPrimary = _localAddresses.isEmpty;
-    bool isSaving = false;
+    if (sheetResult is! UserAddress) {
+      return;
+    }
 
     try {
-      final bool? result = await showDialog<bool>(
-        context: context,
-        barrierDismissible: false,
-        builder: (dialogContext) {
-          return StatefulBuilder(
-            builder: (context, setLocalState) {
-              final bool isDark =
-                  Theme.of(context).brightness == Brightness.dark;
-              final Color onSurface =
-                  Theme.of(context).colorScheme.onSurface;
+      setState(() {
+        _isLoadingAddresses = true;
+      });
 
-              return AlertDialog(
-                backgroundColor: Theme.of(context).cardColor,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(24),
-                ),
-                title: Text(
-                  'Новый адрес',
-                  style: TextStyle(
-                    color: onSurface,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                content: SingleChildScrollView(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      TextField(
-                        controller: titleController,
-                        enabled: !isSaving,
-                        decoration: const InputDecoration(
-                          labelText: 'Название адреса',
-                          hintText: 'Дом / Работа / Для мамы',
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      TextField(
-                        controller: addressController,
-                        enabled: !isSaving,
-                        decoration: const InputDecoration(
-                          labelText: 'Адрес',
-                          hintText: 'Москва, Авиаторов 10, 1',
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      TextField(
-                        controller: apartmentController,
-                        enabled: !isSaving,
-                        decoration: const InputDecoration(
-                          labelText: 'Квартира',
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      TextField(
-                        controller: entranceController,
-                        enabled: !isSaving,
-                        decoration: const InputDecoration(
-                          labelText: 'Подъезд',
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      TextField(
-                        controller: floorController,
-                        enabled: !isSaving,
-                        decoration: const InputDecoration(
-                          labelText: 'Этаж',
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      TextField(
-                        controller: commentController,
-                        enabled: !isSaving,
-                        decoration: const InputDecoration(
-                          labelText: 'Комментарий для курьера',
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      SwitchListTile(
-                        contentPadding: EdgeInsets.zero,
-                        value: isPrimary,
-                        activeColor:
-                        isDark ? AppColors.purple : AppColors.primary,
-                        title: Text(
-                          'Сделать адресом по умолчанию',
-                          style: TextStyle(color: onSurface),
-                        ),
-                        onChanged: isSaving
-                            ? null
-                            : (value) {
-                          setLocalState(() {
-                            isPrimary = value;
-                          });
-                        },
-                      ),
-                    ],
-                  ),
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: isSaving
-                        ? null
-                        : () {
-                      Navigator.of(dialogContext).pop(false);
-                    },
-                    child: const Text('Отмена'),
-                  ),
-                  ElevatedButton(
-                    onPressed: isSaving
-                        ? null
-                        : () async {
-                      final String address =
-                      addressController.text.trim();
+      await addressBookController.addAddress(sheetResult);
+      await addressBookController.loadAddresses();
 
-                      if (address.isEmpty) {
-                        Get.snackbar('Ошибка', 'Введите адрес');
-                        return;
-                      }
+      if (!mounted) {
+        return;
+      }
 
-                      setLocalState(() {
-                        isSaving = true;
-                      });
-
-                      try {
-                        final UserAddress newAddress = UserAddress(
-                          id: 0,
-                          title: titleController.text.trim().isEmpty
-                              ? 'Новый адрес'
-                              : titleController.text.trim(),
-                          address: address,
-                          entrance: entranceController.text.trim(),
-                          floor: floorController.text.trim(),
-                          apartment: apartmentController.text.trim(),
-                          comment: commentController.text.trim(),
-                          isPrimary: isPrimary,
-                        );
-
-                        await addressBookController.addAddress(newAddress);
-
-                        if (!mounted) {
-                          return;
-                        }
-
-                        Navigator.of(dialogContext).pop(true);
-                      } catch (e) {
-                        if (!mounted) {
-                          return;
-                        }
-
-                        setLocalState(() {
-                          isSaving = false;
-                        });
-
-                        Get.snackbar(
-                          'Ошибка',
-                          'Не удалось сохранить адрес: $e',
-                          backgroundColor: Colors.redAccent,
-                          colorText: Colors.white,
-                        );
-                      }
-                    },
-                    child: isSaving
-                        ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                        : const Text('Сохранить'),
-                  ),
-                ],
-              );
-            },
-          );
-        },
+      final List<UserAddress> freshAddresses = List<UserAddress>.from(
+        addressBookController.addresses,
       );
 
-      if (result == true && mounted) {
-        setState(() {
-          _localAddresses =
-          List<UserAddress>.from(addressBookController.addresses);
-          _localSelectedAddress = addressBookController.selectedAddress;
-          _isLoadingAddresses = false;
-        });
+      setState(() {
+        _localAddresses = freshAddresses;
+        _localSelectedAddress = addressBookController.selectedAddress ??
+            (freshAddresses.isNotEmpty ? freshAddresses.first : null);
+        _isLoadingAddresses = false;
+      });
+
+      Get.snackbar(
+        'Готово',
+        'Адрес добавлен и выбран для доставки',
+        snackPosition: SnackPosition.TOP,
+      );
+    } catch (e) {
+      if (!mounted) {
+        return;
       }
-    } finally {
-      titleController.dispose();
-      addressController.dispose();
-      entranceController.dispose();
-      floorController.dispose();
-      apartmentController.dispose();
-      commentController.dispose();
+
+      setState(() {
+        _isLoadingAddresses = false;
+      });
+
+      Get.snackbar(
+        'Ошибка',
+        'Не удалось сохранить адрес: $e',
+        snackPosition: SnackPosition.TOP,
+        backgroundColor: Colors.redAccent,
+        colorText: Colors.white,
+      );
     }
   }
 
