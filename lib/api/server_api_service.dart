@@ -613,7 +613,7 @@ class ServerApiService {
         'image_url': imageUrl ?? '',
         'category_id': categoryId,
         'in_stock': inStock,
-        'care': care,
+        'care': care ?? <String>[],
       }),
     );
 
@@ -1740,7 +1740,7 @@ class _DemoDataStore {
       }
     }
 
-    if (products.length < 12) {
+    if (products.isEmpty) {
       products.addAll([
         {
           'id': 11,

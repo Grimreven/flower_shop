@@ -543,25 +543,47 @@ app.put("/products/:id", authenticateToken, requireAdmin, async (req, res) => {
 app.delete("/products/:id", authenticateToken, requireAdmin, async (req, res) => {
   const productId = Number(req.params.id);
 
+  if (!Number.isFinite(productId) || productId <= 0) {
+    return res.status(400).json({ message: "Некорректный ID товара" });
+  }
+
   try {
-    const result = await pool.query(
-      `
-      UPDATE products
-      SET in_stock = false
-      WHERE id = $1
-      RETURNING *
-      `,
+    await pool.query("BEGIN");
+
+    const productResult = await pool.query(
+      "SELECT id FROM products WHERE id = $1",
       [productId]
     );
 
-    if (result.rows.length === 0) {
+    if (productResult.rows.length === 0) {
+      await pool.query("ROLLBACK");
       return res.status(404).json({ message: "Товар не найден" });
     }
 
-    res.json({ message: "Товар скрыт из каталога", product: result.rows[0] });
+    await pool.query("DELETE FROM favorites WHERE product_id = $1", [productId]);
+    await pool.query("DELETE FROM cart_items WHERE product_id = $1", [productId]);
+    await pool.query("DELETE FROM product_images WHERE product_id = $1", [productId]);
+    await pool.query("DELETE FROM reviews WHERE product_id = $1", [productId]);
+    await pool.query("DELETE FROM product_promotions WHERE product_id = $1", [productId]);
+    await pool.query("DELETE FROM product_price_history WHERE product_id = $1", [productId]);
+
+    await pool.query(
+      "UPDATE order_items SET product_id = NULL WHERE product_id = $1",
+      [productId]
+    );
+
+    await pool.query("DELETE FROM products WHERE id = $1", [productId]);
+
+    await pool.query("COMMIT");
+
+    res.json({ message: "Товар удалён" });
   } catch (err) {
+    await pool.query("ROLLBACK");
     console.error("Ошибка DELETE /products/:id:", err);
-    res.status(500).json({ message: "Ошибка сервера", error: err.message });
+    res.status(500).json({
+      message: "Ошибка удаления товара",
+      error: err.message,
+    });
   }
 });
 

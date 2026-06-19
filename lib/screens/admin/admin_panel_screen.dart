@@ -58,15 +58,26 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
   Future<void> deleteProduct(int id) async {
     try {
       await ServerApiService.deleteProduct(id);
-      await loadProducts();
 
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
+
+      setState(() {
+        products.removeWhere((Map<String, dynamic> item) {
+          return _toInt(item['id']) == id;
+        });
+      });
+
+      try {
+        stats = await ServerApiService.getAdminStats();
+        if (mounted) {
+          setState(() {});
+        }
+      } catch (_) {}
 
       _showMessage('Товар удалён');
     } catch (e) {
-      _showMessage('Ошибка: $e');
+      if (!mounted) return;
+      _showMessage('Ошибка удаления товара: $e');
     }
   }
 
@@ -106,6 +117,8 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
 
     if (result == true) {
       await loadProducts();
+      if (!mounted) return;
+      _showMessage('Товар добавлен');
     }
   }
 
@@ -118,6 +131,8 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
 
     if (result == true) {
       await loadProducts();
+      if (!mounted) return;
+      _showMessage('Товар обновлён');
     }
   }
 
@@ -131,8 +146,8 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
         return AlertDialog(
           backgroundColor: isDark ? AppColors.darkSurface : Colors.white,
           title: const Text('Удалить товар?'),
-          content: const Text(
-            'Товар будет скрыт из каталога.\nЭто действие можно отменить через базу данных.',
+          content: Text(
+            'Товар "${product['name'] ?? ''}" будет удалён из списка товаров.',
           ),
           actions: [
             TextButton(
@@ -145,7 +160,10 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
               onPressed: () {
                 Navigator.of(dialogContext).pop(true);
               },
-              child: const Text('Удалить'),
+              child: const Text(
+                'Удалить',
+                style: TextStyle(color: AppColors.danger),
+              ),
             ),
           ],
         );
